@@ -4,7 +4,7 @@ sqlalchemy[asyncio]==2.0.43
 asyncpg==0.30.0
 pydantic-settings==2.10.1
 python-multipart==0.0.20
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
 python-jose[cryptography]==3.5.0
 alembic==1.16.4
 openpyxl==3.1.5

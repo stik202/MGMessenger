@@ -1,10 +1,17 @@
-﻿import argparse
+import argparse
 import asyncio
+import sys
 from pathlib import Path
 from uuid import UUID
 
 from openpyxl import load_workbook
 from sqlalchemy import select
+
+# Make imports work regardless of current working directory in container.
+for candidate in (Path.cwd(), Path("/app"), Path(__file__).resolve().parents[1]):
+    if (candidate / "app").exists():
+        sys.path.insert(0, str(candidate))
+        break
 
 from app.core.security import hash_password
 from app.db.models import ChatGroup, GroupMember, Message, User
@@ -176,5 +183,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 

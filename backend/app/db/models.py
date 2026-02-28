@@ -1,7 +1,7 @@
 ﻿import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,10 +23,14 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(120), default="")
     first_name: Mapped[str] = mapped_column(String(120), default="")
     middle_name: Mapped[str] = mapped_column(String(120), default="")
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    sent_messages: Mapped[list["Message"]] = relationship("Message", back_populates="sender", foreign_keys="Message.sender_id")
+    sent_messages: Mapped[list["Message"]] = relationship(
+        "Message", back_populates="sender", foreign_keys="Message.sender_id"
+    )
 
 
 class ChatGroup(Base):
@@ -63,7 +67,9 @@ class Message(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
-    sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     sender: Mapped[User] = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])
 
     receiver_user_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -76,4 +82,39 @@ class Message(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     file_url: Mapped[str] = mapped_column(String(500), default="")
     file_mime: Mapped[str] = mapped_column(String(150), default="")
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
 
+
+class UserNote(Base):
+    __tablename__ = "user_notes"
+    __table_args__ = (UniqueConstraint("owner_user_id", "target_user_id", name="uq_user_note_owner_target"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
+class ContactInvite(Base):
+    __tablename__ = "contact_invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+
+    creator_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    used_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

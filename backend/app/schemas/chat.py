@@ -42,6 +42,8 @@ class UserProfile(BaseModel):
     last_name: str
     first_name: str
     middle_name: str
+    is_blocked: bool
+    is_visible: bool
 
 
 class UserShort(BaseModel):
@@ -52,7 +54,14 @@ class UserShort(BaseModel):
     phone: str
     email: str
     position: str
+    unread_count: int = 0
+    last_message: str = ""
+    last_time: str = ""
     is_group: bool = False
+
+
+class UserInfoOut(UserShort):
+    note: str = ""
 
 
 class GroupShort(BaseModel):
@@ -61,6 +70,9 @@ class GroupShort(BaseModel):
     avatar_url: str
     owner_login: str
     members: list[str]
+    unread_count: int = 0
+    last_message: str = ""
+    last_time: str = ""
     is_group: bool = True
 
 
@@ -76,6 +88,7 @@ class MessageOut(BaseModel):
     file_url: str
     is_image: bool
     is_mine: bool
+    is_read: bool
     time: str
     created_at: datetime
 
@@ -91,5 +104,97 @@ class GroupUpdateIn(BaseModel):
     members: list[str]
 
 
-TokenOut.model_rebuild()
+class GroupOwnerTransferIn(BaseModel):
+    new_owner_login: str
 
+
+class AdminUserCreateIn(BaseModel):
+    login: str
+    password: str
+    role: str = "User"
+    first_name: str = ""
+    last_name: str = ""
+    middle_name: str = ""
+    phone: str = ""
+    email: str = ""
+    position: str = ""
+    is_visible: bool = True
+
+
+class AdminUserUpdateIn(BaseModel):
+    id: UUID | None = None
+    login: str | None = None
+    role: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    position: str | None = None
+    avatar_url: str | None = None
+    is_blocked: bool | None = None
+    is_visible: bool | None = None
+    password: str | None = None
+
+
+class AdminUserBlockIn(BaseModel):
+    is_blocked: bool
+
+
+class AdminUserOut(BaseModel):
+    id: UUID
+    login: str
+    role: str
+    name: str
+    first_name: str
+    last_name: str
+    middle_name: str
+    phone: str
+    email: str
+    position: str
+    avatar_url: str
+    is_blocked: bool
+    is_visible: bool
+    created_at: datetime
+
+
+class CallInviteIn(BaseModel):
+    target_login: str
+
+
+class UserNoteIn(BaseModel):
+    note: str = ""
+
+
+class UserNoteOut(BaseModel):
+    note: str = ""
+
+
+class MessageEditIn(BaseModel):
+    text: str = ""
+
+
+class MessageForwardIn(BaseModel):
+    chat_type: str
+    target: str
+
+
+class ContactShareIn(BaseModel):
+    target_login: str
+
+
+class ContactShareOut(BaseModel):
+    token: str
+    path: str
+
+
+class ContactInviteOpenOut(BaseModel):
+    login: str
+    name: str
+    avatar_url: str
+    phone: str
+    email: str
+    position: str
+
+
+TokenOut.model_rebuild()

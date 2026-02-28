@@ -5,3 +5,14 @@ import "./styles.css";
 
 createRoot(document.getElementById("root")).render(<App />);
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((reg) => reg.update())
+      .catch(() => {
+        // ignore SW registration errors in dev
+      });
+  });
+}
+
