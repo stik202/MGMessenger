@@ -26,7 +26,7 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    sent_messages: Mapped[list["Message"]] = relationship("Message", back_populates="sender")
+    sent_messages: Mapped[list["Message"]] = relationship("Message", back_populates="sender", foreign_keys="Message.sender_id")
 
 
 class ChatGroup(Base):
@@ -64,7 +64,7 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     sender_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    sender: Mapped[User] = relationship("User", back_populates="sent_messages")
+    sender: Mapped[User] = relationship("User", back_populates="sent_messages", foreign_keys=[sender_id])
 
     receiver_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
