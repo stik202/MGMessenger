@@ -1,0 +1,144 @@
+﻿:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #10131a;
+  color: #f7f7f7;
+}
+
+button,
+input {
+  border-radius: 10px;
+  border: 1px solid #3a4154;
+  background: #1e2430;
+  color: #fff;
+  padding: 10px;
+}
+
+button {
+  cursor: pointer;
+}
+
+.auth-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.auth-card {
+  width: min(360px, 90vw);
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  background: #151a24;
+  border: 1px solid #2e374a;
+  border-radius: 14px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 12px;
+  border-right: 1px solid #2e374a;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.panel-block {
+  background: #151a24;
+  padding: 10px;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.search-results,
+.profile {
+  display: grid;
+  gap: 6px;
+}
+
+.item-btn {
+  width: 100%;
+  text-align: left;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+}
+
+.chat-header {
+  padding: 14px;
+  border-bottom: 1px solid #2e374a;
+}
+
+.messages {
+  padding: 16px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.msg {
+  background: #1b2330;
+  border: 1px solid #2e374a;
+  border-radius: 10px;
+  padding: 10px;
+  max-width: 70%;
+}
+
+.msg.me {
+  margin-left: auto;
+  background: #223856;
+}
+
+.meta,
+.time {
+  font-size: 12px;
+  color: #9ba6c7;
+}
+
+.msg-image {
+  max-width: 260px;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.send-box {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid #2e374a;
+}
+
+.profile {
+  border-top: 1px solid #2e374a;
+  padding: 10px;
+  background: #121722;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.error {
+  color: #ff9aa2;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
