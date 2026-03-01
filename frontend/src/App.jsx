@@ -552,6 +552,12 @@ export default function App() {
     setEditingGroupAvatar(uploaded.url);
   }
 
+  async function uploadMyAvatar(file) {
+    if (!file) return;
+    const uploaded = await apiUploadFile(token, file);
+    setProfileForm((prev) => ({ ...prev, avatar_url: uploaded.url }));
+  }
+
   async function transferGroupOwner() {
     if (!activeChat?.is_group || !groupNewOwner.trim()) return;
     await apiTransferGroupOwner(token, activeChat.id, groupNewOwner.trim());
@@ -679,6 +685,10 @@ export default function App() {
     if (!node) return;
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
     stickToBottomRef.current = distanceFromBottom < 120;
+  }
+
+  function isMobileInputMode() {
+    return window.innerWidth <= 768;
   }
 
   function applyMessagesWithSmartScroll(rows) {
@@ -951,7 +961,7 @@ export default function App() {
                 <div className="msg-sender">{m.sender}</div>
                 {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
                 {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
-                <div>{m.text}</div>
+                <div className="msg-text">{m.text}</div>
                 <div className="msg-time">{m.time}</div>
                 {m._localStatus === "failed" ? (
                   <div className="send-failed">
@@ -970,9 +980,16 @@ export default function App() {
                 rows={1}
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
+                onInput={(e) => {
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+                }}
                 placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                  if (e.key !== "Enter") return;
+                  if (isMobileInputMode()) return;
+                  if (e.shiftKey) return;
+                  if (e.ctrlKey || e.metaKey || !e.shiftKey) {
                     e.preventDefault();
                     sendMessage();
                   }
@@ -1076,6 +1093,16 @@ export default function App() {
       {profileOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
+            <div className="profile-avatar-wrap">
+              <label className="avatar-click">
+                {profileForm.avatar_url ? (
+                  <img src={profileForm.avatar_url} className="avatar xlarge" alt="my avatar" />
+                ) : (
+                  <div className="avatar-placeholder xlarge">{initial(me)}</div>
+                )}
+                <input hidden type="file" accept="image/*" onChange={(e) => uploadMyAvatar(e.target.files?.[0])} />
+              </label>
+            </div>
             <input value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
             <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
             <input value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
