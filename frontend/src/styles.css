@@ -398,6 +398,9 @@ a {
   align-items: center;
   gap: 10px;
   min-height: 40px;
+  flex-shrink: 0;
+  background: var(--glass);
+  backdrop-filter: blur(20px);
 }
 
 .chat-header-title {
@@ -431,6 +434,12 @@ a {
   color: var(--ios-blue);
   font-size: 22px;
   font-weight: 700;
+}
+
+.send-btn-edit {
+  background: none;
+  color: #fff;
+  font-size: 20px;
 }
 
 .plus-wrap {
@@ -716,6 +725,19 @@ a {
     display: block;
   }
 
+  .main-chat.mobile-active .chat-h {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    border-radius: 0;
+  }
+
+  .main-chat.mobile-active .messages {
+    padding: 70px 12px 12px 12px;
+  }
+
   .messages {
     flex: 1;
     overflow-y: auto;
@@ -799,6 +821,19 @@ a {
   border: 1px solid #555;
   background: var(--input-bg);
   color: #fff;
+}
+
+.copy-toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  z-index: 9500;
 }
 
 .admin-card {

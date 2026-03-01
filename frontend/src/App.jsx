@@ -111,6 +111,7 @@ export default function App() {
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [messageMenu, setMessageMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [copyToast, setCopyToast] = useState(false);
 
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminQuery, setAdminQuery] = useState("");
@@ -226,6 +227,12 @@ export default function App() {
   }, [messageText, pendingFile]);
 
   useEffect(() => {
+    if (!copyToast) return;
+    const t = setTimeout(() => setCopyToast(false), 3000);
+    return () => clearTimeout(t);
+  }, [copyToast]);
+
+  useEffect(() => {
     if (!token || !activeChat) return;
     loadMessages(activeChat);
   }, [token, activeChat]);
@@ -335,13 +342,6 @@ export default function App() {
       if ("Notification" in window) setNotificationPermission(Notification.permission);
       setLogin("");
       setPassword("");
-      if (window.screen?.orientation?.lock && window.innerWidth <= 768) {
-        try {
-          await window.screen.orientation.lock("portrait");
-        } catch {
-          /* orientation lock not supported or requires fullscreen */
-        }
-      }
     } catch (err) {
       setError(err.message || "Ошибка входа");
     }
@@ -714,23 +714,11 @@ export default function App() {
   async function shareContactLink(targetLogin) {
     const shared = await apiShareContact(token, targetLogin);
     const link = `${window.location.origin}${shared.path}`;
-    if (!navigator.share) {
-      alert("Поделиться можно только на устройстве с поддержкой меню «Поделиться» (на телефоне или в приложении).");
-      return;
-    }
-    if (!window.isSecureContext) {
-      alert("Поделиться можно только по HTTPS (или на localhost).");
-      return;
-    }
     try {
-      await navigator.share({
-        title: "MG Messenger",
-        text: "Контакт для чата в MG Messenger",
-        url: link,
-      });
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      alert("Не удалось открыть меню поделиться");
+      await navigator.clipboard.writeText(link);
+      setCopyToast(true);
+    } catch {
+      alert("Не удалось скопировать ссылку");
     }
   }
 
@@ -1031,6 +1019,10 @@ export default function App() {
         </div>
       ) : null}
 
+      {copyToast ? (
+        <div className="copy-toast">Ссылка скопирована</div>
+      ) : null}
+
       {messageMenu ? (
         <div className="context-backdrop" onMouseDown={() => setMessageMenu(null)} onTouchStart={() => setMessageMenu(null)}>
           <div
@@ -1176,7 +1168,7 @@ export default function App() {
               {editingMessage?.id ? (
                 <button className="icon-btn" title="Отменить редактирование" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>✕</button>
               ) : null}
-              <button className="send-btn" onClick={sendMessage}>{editingMessage?.id ? "✅" : "🚀"}</button>
+              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "✓" : "🚀"}</button>
             </div>
           </div>
         </div>
