@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   apiAdminBlockUser,
   apiAdminCreateUser,
@@ -30,6 +30,8 @@ import {
 } from "./api";
 
 const LS_KEY = "mgm_auth";
+const MAX_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_SIDE = 1024;
 
 const initialProfile = {
   last_name: "",
@@ -52,6 +54,13 @@ function initial(obj) {
 
 function roomId(a, b) {
   return [a, b].sort().join("__");
+}
+
+function formatDeviceTime(createdAt, fallback = "") {
+  if (!createdAt) return fallback;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function App() {
@@ -101,6 +110,7 @@ export default function App() {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [messageMenu, setMessageMenu] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
 
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminQuery, setAdminQuery] = useState("");
@@ -131,6 +141,8 @@ export default function App() {
   const callPeerRef = useRef("");
   const pollingRef = useRef(null);
   const longPressRef = useRef(null);
+  const messageInputRef = useRef(null);
+  const swipeStartRef = useRef({ x: 0, y: 0 });
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
 
@@ -205,6 +217,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!messageText && !pendingFile && messageInputRef.current) {
+      const el = messageInputRef.current;
+      requestAnimationFrame(() => {
+        el.style.height = "22px";
+      });
+    }
+  }, [messageText, pendingFile]);
+
+  useEffect(() => {
     if (!token || !activeChat) return;
     loadMessages(activeChat);
   }, [token, activeChat]);
@@ -241,7 +262,7 @@ export default function App() {
     if (!chat) return;
     clearUnreadForChat(chat);
     const rows = await apiGetMessages(token, chat.is_group ? "group" : "private", chat.target);
-    applyMessagesWithSmartScroll(rows);
+    applyMessagesWithSmartScroll(normalizeServerMessages(rows));
     await refreshChats();
     clearUnreadForChat(chat);
   }
@@ -258,7 +279,7 @@ export default function App() {
             activeChatRef.current.is_group ? "group" : "private",
             activeChatRef.current.target
           );
-          applyMessagesWithSmartScroll(rows);
+          applyMessagesWithSmartScroll(normalizeServerMessages(rows));
           clearUnreadForChat(activeChatRef.current);
         }
         if (
@@ -314,6 +335,13 @@ export default function App() {
       if ("Notification" in window) setNotificationPermission(Notification.permission);
       setLogin("");
       setPassword("");
+      if (window.screen?.orientation?.lock && window.innerWidth <= 768) {
+        try {
+          await window.screen.orientation.lock("portrait");
+        } catch {
+          /* orientation lock not supported or requires fullscreen */
+        }
+      }
     } catch (err) {
       setError(err.message || "Ошибка входа");
     }
@@ -343,10 +371,92 @@ export default function App() {
     if (window.innerWidth <= 768) setIsMobileChat(false);
   }
 
+  function normalizeServerMessages(rows) {
+    return (rows || []).map((row) => ({
+      ...row,
+      time: formatDeviceTime(row.created_at, row.time || ""),
+    }));
+  }
+
+  function autosizeMessageInput(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }
+
+  function resetMessageInputHeight() {
+    const el = messageInputRef.current;
+    if (!el) return;
+    el.style.height = "22px";
+  }
+
+  async function imageFileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Ошибка чтения файла"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function loadImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Ошибка изображения"));
+      img.src = dataUrl;
+    });
+  }
+
+  async function compressImage(file) {
+    const dataUrl = await imageFileToDataUrl(file);
+    const img = await loadImageFromDataUrl(dataUrl);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.width, img.height));
+    const width = Math.max(1, Math.round(img.width * scale));
+    const height = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, width, height);
+
+    let quality = 0.9;
+    let blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    while (blob && blob.size > MAX_FILE_BYTES && quality > 0.45) {
+      quality -= 0.1;
+      blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    }
+    if (!blob) throw new Error("Не удалось сжать изображение");
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "image"}.jpg`, { type: "image/jpeg" });
+  }
+
+  async function prepareFileForUpload(file) {
+    if (!file) return null;
+    if (file.type.startsWith("image/")) {
+      const prepared = await compressImage(file);
+      if (prepared.size > MAX_FILE_BYTES) {
+        throw new Error("Изображение не удалось сжать до 2 МБ");
+      }
+      return prepared;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      throw new Error("Файл больше 2 МБ");
+    }
+    return file;
+  }
+
   async function sendMessage() {
     const chat = activeChat;
     if (!chat) return;
     if (!messageText.trim() && !pendingFile) return;
+    if (editingMessage?.id) {
+      await apiUpdateMessage(token, editingMessage.id, messageText);
+      setEditingMessage(null);
+      setMessageText("");
+      resetMessageInputHeight();
+      await loadMessages(chat);
+      return;
+    }
     const retryPayload = {
       chatType: chat.is_group ? "group" : "private",
       target: chat.target,
@@ -370,6 +480,7 @@ export default function App() {
     setMessages((prev) => [...prev, optimistic]);
     setMessageText("");
     setPendingFile(null);
+    resetMessageInputHeight();
     try {
       await apiSendMessage(token, retryPayload);
     } catch (e) {
@@ -548,14 +659,34 @@ export default function App() {
 
   async function uploadGroupAvatar(file) {
     if (!file) return;
-    const uploaded = await apiUploadFile(token, file);
-    setEditingGroupAvatar(uploaded.url);
+    try {
+      const prepared = await prepareFileForUpload(file);
+      const uploaded = await apiUploadFile(token, prepared);
+      setEditingGroupAvatar(uploaded.url);
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аватар");
+    }
   }
 
   async function uploadMyAvatar(file) {
     if (!file) return;
-    const uploaded = await apiUploadFile(token, file);
-    setProfileForm((prev) => ({ ...prev, avatar_url: uploaded.url }));
+    try {
+      const prepared = await prepareFileForUpload(file);
+      const uploaded = await apiUploadFile(token, prepared);
+      setProfileForm((prev) => ({ ...prev, avatar_url: uploaded.url }));
+    } catch (e) {
+      alert(e.message || "Не удалось загрузить аватар");
+    }
+  }
+
+  async function pickMessageFile(file) {
+    if (!file) return;
+    try {
+      const prepared = await prepareFileForUpload(file);
+      setPendingFile(prepared);
+    } catch (e) {
+      alert(e.message || "Не удалось подготовить файл");
+    }
   }
 
   async function transferGroupOwner() {
@@ -583,11 +714,23 @@ export default function App() {
   async function shareContactLink(targetLogin) {
     const shared = await apiShareContact(token, targetLogin);
     const link = `${window.location.origin}${shared.path}`;
+    if (!navigator.share) {
+      alert("Поделиться можно только на устройстве с поддержкой меню «Поделиться» (на телефоне или в приложении).");
+      return;
+    }
+    if (!window.isSecureContext) {
+      alert("Поделиться можно только по HTTPS (или на localhost).");
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(link);
-      alert("Ссылка скопирована: " + link);
-    } catch {
-      alert("Ссылка: " + link);
+      await navigator.share({
+        title: "MG Messenger",
+        text: "Контакт для чата в MG Messenger",
+        url: link,
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      alert("Не удалось открыть меню поделиться");
     }
   }
 
@@ -623,10 +766,15 @@ export default function App() {
   }
 
   async function editOwnMessage(message) {
-    const value = window.prompt("Новый текст сообщения", message.text || "");
-    if (value === null) return;
-    await apiUpdateMessage(token, message.id, value);
-    await loadMessages();
+    setEditingMessage({ id: message.id });
+    setMessageText(message.text || "");
+    setPendingFile(null);
+    requestAnimationFrame(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus();
+        autosizeMessageInput(messageInputRef.current);
+      }
+    });
   }
 
   async function deleteOwnMessage(message) {
@@ -671,6 +819,15 @@ export default function App() {
     });
   }
 
+  async function copyMessageText(message) {
+    if (!message?.text) return;
+    try {
+      await navigator.clipboard.writeText(message.text);
+    } catch {
+      // ignore
+    }
+  }
+
   function openUserMenu(loginValue, point) {
     setMessageMenu({
       type: "user",
@@ -689,6 +846,23 @@ export default function App() {
 
   function isMobileInputMode() {
     return window.innerWidth <= 768;
+  }
+
+  function onChatTouchStart(e) {
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    swipeStartRef.current = { x: t.clientX, y: t.clientY };
+  }
+
+  function onChatTouchEnd(e) {
+    if (!isMobileChat) return;
+    const t = e.changedTouches?.[0];
+    if (!t) return;
+    const dx = t.clientX - swipeStartRef.current.x;
+    const dy = Math.abs(t.clientY - swipeStartRef.current.y);
+    if (dx > 50 && dy < 80) {
+      goBackMobile();
+    }
   }
 
   function applyMessagesWithSmartScroll(rows) {
@@ -803,7 +977,7 @@ export default function App() {
             activeChatRef.current.is_group ? "group" : "private",
             activeChatRef.current.target
           );
-          applyMessagesWithSmartScroll(rows);
+          applyMessagesWithSmartScroll(normalizeServerMessages(rows));
         }
       } catch {
         // keep silent; websocket/poll will retry
@@ -863,7 +1037,7 @@ export default function App() {
             className="context-menu"
             style={{ left: Math.max(8, Math.min(messageMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(messageMenu.y, window.innerHeight - 170)) }}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
             {messageMenu.type === "message" ? (
               <>
@@ -872,6 +1046,9 @@ export default function App() {
                 ) : null}
                 {messageMenu.message?.is_mine ? (
                   <button onClick={() => { deleteOwnMessage(messageMenu.message); setMessageMenu(null); }}>Удалить</button>
+                ) : null}
+                {messageMenu.message?.text ? (
+                  <button onClick={() => { copyMessageText(messageMenu.message); setMessageMenu(null); }}>Копировать текст</button>
                 ) : null}
                 <button onClick={() => { openForwardDialog(messageMenu.message); setMessageMenu(null); }}>Переслать</button>
               </>
@@ -891,7 +1068,7 @@ export default function App() {
             <div className="brand">MG MESSENGER</div>
             <button
               className="notify-btn"
-              title="Разрешить уведомления"
+              title={!window.isSecureContext ? "Уведомления требуют HTTPS" : "Разрешить уведомления"}
               onClick={requestNotifications}
               style={{ display: notificationPermission === "granted" || notificationPermission === "unsupported" ? "none" : "inline-flex" }}
             >
@@ -931,13 +1108,13 @@ export default function App() {
                   <div className="chat-title">{u.kind === "group" ? "Группа " : ""}{u.name}</div>
                   <div className="chat-subtitle">{u.last_message || "Нет сообщений"}</div>
                 </div>
-                {u.unread_count > 0 && !isCurrentChat(u) ? <div className="badge">{u.unread_count}</div> : null}
+                {(u.unread_count ?? 0) > 0 && !isCurrentChat(u) ? <div className="badge">{(u.unread_count ?? 0) > 99 ? "99+" : u.unread_count}</div> : null}
               </div>
             ))}
           </div>
         </div>
 
-        <div className={`main-chat ${isMobileChat ? "mobile-active" : ""}`}>
+        <div className={`main-chat ${isMobileChat ? "mobile-active" : ""}`} onTouchStart={onChatTouchStart} onTouchEnd={onChatTouchEnd}>
           <div className="chat-h">
             <button className="icon-btn mobile-back" onClick={goBackMobile}>←</button>
             <span className="chat-header-title">{activeChat ? activeChat.name : "Выберите диалог"}</span>
@@ -973,29 +1150,33 @@ export default function App() {
             ))}
           </div>
           <div className="input-area">
+            {editingMessage?.id ? <div className="edit-hint">Редактирование сообщения</div> : null}
             <div className="input-wrapper">
-              <label className="icon-btn">📎<input hidden type="file" onChange={(e) => setPendingFile(e.target.files?.[0] || null)} /></label>
+              <label className="icon-btn">📎<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
               <textarea
+                ref={messageInputRef}
                 className="message-input"
                 rows={1}
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 onInput={(e) => {
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
+                  autosizeMessageInput(e.target);
                 }}
                 placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;
                   if (e.shiftKey) return;
-                  if (e.ctrlKey || e.metaKey || !e.shiftKey) {
+                  if (!e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
                     sendMessage();
                   }
                 }}
               />
-              <button className="send-btn" onClick={sendMessage}>🚀</button>
+              {editingMessage?.id ? (
+                <button className="icon-btn" title="Отменить редактирование" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>✕</button>
+              ) : null}
+              <button className="send-btn" onClick={sendMessage}>{editingMessage?.id ? "✅" : "🚀"}</button>
             </div>
           </div>
         </div>
@@ -1074,7 +1255,7 @@ export default function App() {
             <div className="group-avatar-editor">
               <label className="avatar-click">
                 {editingGroupAvatar ? <img src={editingGroupAvatar} className="avatar large" alt="group avatar" /> : <div className="avatar-placeholder large">{initial({ name: editingGroupName })}</div>}
-                <input hidden type="file" accept="image/*" onChange={(e) => uploadGroupAvatar(e.target.files?.[0])} />
+                <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadGroupAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
             <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} placeholder="Название" />
@@ -1100,7 +1281,7 @@ export default function App() {
                 ) : (
                   <div className="avatar-placeholder xlarge">{initial(me)}</div>
                 )}
-                <input hidden type="file" accept="image/*" onChange={(e) => uploadMyAvatar(e.target.files?.[0])} />
+                <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadMyAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
             <input value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />

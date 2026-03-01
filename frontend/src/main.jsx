@@ -16,3 +16,11 @@ if ("serviceWorker" in navigator) {
   });
 }
 
+if (screen.orientation?.lock) {
+  window.addEventListener("load", () => {
+    screen.orientation.lock("portrait").catch(() => {
+      // orientation lock may be unavailable in browser mode
+    });
+  });
+}
+
