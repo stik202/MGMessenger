@@ -400,6 +400,8 @@ async def get_messages(
             text=row.text,
             file_url=row.file_url,
             is_image=row.file_mime.startswith("image/"),
+            forwarded_from_login=row.forwarded_from_login or "",
+            forwarded_from_name=row.forwarded_from_name or "",
             is_mine=row.sender_id == current_user.id,
             is_read=row.is_read,
             time=row.created_at.strftime("%H:%M") if row.created_at else "",
@@ -541,17 +543,25 @@ async def forward_message(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    source = await db.scalar(select(Message).where(Message.id == message_id))
+    source = await db.scalar(select(Message).options(selectinload(Message.sender)).where(Message.id == message_id))
     if not source:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
-    if source.sender_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Можно пересылать только свои сообщения")
+    if source.group_id:
+        membership = await db.scalar(
+            select(GroupMember).where(GroupMember.group_id == source.group_id, GroupMember.user_id == current_user.id)
+        )
+        if not membership:
+            raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
+    elif source.sender_id != current_user.id and source.receiver_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
 
     forwarded = Message(
         sender_id=current_user.id,
         text=source.text,
         file_url=source.file_url,
         file_mime=source.file_mime,
+        forwarded_from_login=source.sender.login if source.sender else "",
+        forwarded_from_name=build_display_name(source.sender) if source.sender else "",
         is_read=False,
     )
     notify_logins = [current_user.login]

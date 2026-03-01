@@ -13,6 +13,8 @@ async def ensure_columns() -> None:
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_visible BOOLEAN DEFAULT TRUE",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS forwarded_from_login VARCHAR(128) DEFAULT ''",
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS forwarded_from_name VARCHAR(255) DEFAULT ''",
         """
         CREATE TABLE IF NOT EXISTS contact_invites (
             id UUID PRIMARY KEY,

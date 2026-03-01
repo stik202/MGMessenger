@@ -87,6 +87,8 @@ class MessageOut(BaseModel):
     text: str
     file_url: str
     is_image: bool
+    forwarded_from_login: str = ""
+    forwarded_from_name: str = ""
     is_mine: bool
     is_read: bool
     time: str

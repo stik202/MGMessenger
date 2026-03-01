@@ -209,12 +209,6 @@ export default function App() {
     loadMessages(activeChat);
   }, [token, activeChat]);
 
-  useEffect(() => {
-    if (msgListRef.current && stickToBottomRef.current) {
-      msgListRef.current.scrollTop = msgListRef.current.scrollHeight;
-    }
-  }, [messages]);
-
   async function initSession() {
     try {
       const [meData, usersData, chatsData] = await Promise.all([apiGetMe(token), apiSearchUsers(token, ""), apiGetActiveChats(token)]);
@@ -247,11 +241,7 @@ export default function App() {
     if (!chat) return;
     clearUnreadForChat(chat);
     const rows = await apiGetMessages(token, chat.is_group ? "group" : "private", chat.target);
-    if (stickToBottomRef.current) {
-      // keep autoscroll only when user is already near the bottom
-      stickToBottomRef.current = true;
-    }
-    setMessages(rows);
+    applyMessagesWithSmartScroll(rows);
     await refreshChats();
     clearUnreadForChat(chat);
   }
@@ -268,7 +258,7 @@ export default function App() {
             activeChatRef.current.is_group ? "group" : "private",
             activeChatRef.current.target
           );
-          setMessages(rows);
+          applyMessagesWithSmartScroll(rows);
           clearUnreadForChat(activeChatRef.current);
         }
         if (
@@ -369,6 +359,8 @@ export default function App() {
       text: messageText,
       file_url: "",
       is_image: false,
+      forwarded_from_login: "",
+      forwarded_from_name: "",
       is_mine: true,
       is_read: false,
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
@@ -465,6 +457,10 @@ export default function App() {
 
   async function startVoiceCall() {
     if (!activeChat || activeChat.is_group) return;
+    if (!window.isSecureContext) {
+      alert("Голосовые звонки в браузере работают только по HTTPS (или на localhost).");
+      return;
+    }
     callPeerRef.current = activeChat.login;
     await apiCallInvite(token, activeChat.login);
     connectCall(roomId(me.login, activeChat.login), true);
@@ -660,7 +656,6 @@ export default function App() {
   }
 
   function openMessageMenu(message, point) {
-    if (!message?.is_mine) return;
     if (message?._localStatus === "failed") return;
     setMessageMenu({
       type: "message",
@@ -684,6 +679,26 @@ export default function App() {
     if (!node) return;
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
     stickToBottomRef.current = distanceFromBottom < 120;
+  }
+
+  function applyMessagesWithSmartScroll(rows) {
+    const node = msgListRef.current;
+    if (!node) {
+      setMessages(rows);
+      return;
+    }
+    const shouldStick = stickToBottomRef.current;
+    const bottomOffset = node.scrollHeight - node.scrollTop;
+    setMessages(rows);
+    requestAnimationFrame(() => {
+      const next = msgListRef.current;
+      if (!next) return;
+      if (shouldStick) {
+        next.scrollTop = next.scrollHeight;
+      } else {
+        next.scrollTop = Math.max(0, next.scrollHeight - bottomOffset);
+      }
+    });
   }
 
   async function openAdmin() {
@@ -758,6 +773,10 @@ export default function App() {
 
   async function requestNotifications() {
     if (!("Notification" in window)) return;
+    if (!window.isSecureContext) {
+      alert("Уведомления работают только по HTTPS (или на localhost).");
+      return;
+    }
     const result = await Notification.requestPermission();
     setNotificationPermission(result);
   }
@@ -774,7 +793,7 @@ export default function App() {
             activeChatRef.current.is_group ? "group" : "private",
             activeChatRef.current.target
           );
-          setMessages(rows);
+          applyMessagesWithSmartScroll(rows);
         }
       } catch {
         // keep silent; websocket/poll will retry
@@ -838,8 +857,12 @@ export default function App() {
           >
             {messageMenu.type === "message" ? (
               <>
-                <button onClick={() => { editOwnMessage(messageMenu.message); setMessageMenu(null); }}>Редактировать</button>
-                <button onClick={() => { deleteOwnMessage(messageMenu.message); setMessageMenu(null); }}>Удалить</button>
+                {messageMenu.message?.is_mine ? (
+                  <button onClick={() => { editOwnMessage(messageMenu.message); setMessageMenu(null); }}>Редактировать</button>
+                ) : null}
+                {messageMenu.message?.is_mine ? (
+                  <button onClick={() => { deleteOwnMessage(messageMenu.message); setMessageMenu(null); }}>Удалить</button>
+                ) : null}
                 <button onClick={() => { openForwardDialog(messageMenu.message); setMessageMenu(null); }}>Переслать</button>
               </>
             ) : (
@@ -926,6 +949,7 @@ export default function App() {
                 onTouchCancel={endLongPress}
               >
                 <div className="msg-sender">{m.sender}</div>
+                {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
                 {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
                 <div>{m.text}</div>
                 <div className="msg-time">{m.time}</div>
@@ -941,7 +965,19 @@ export default function App() {
           <div className="input-area">
             <div className="input-wrapper">
               <label className="icon-btn">📎<input hidden type="file" onChange={(e) => setPendingFile(e.target.files?.[0] || null)} /></label>
-              <input value={messageText} onChange={(e) => setMessageText(e.target.value)} placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."} onKeyDown={(e) => e.key === "Enter" && sendMessage()} />
+              <textarea
+                className="message-input"
+                rows={1}
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+              />
               <button className="send-btn" onClick={sendMessage}>🚀</button>
             </div>
           </div>
@@ -1019,9 +1055,8 @@ export default function App() {
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
             <div className="group-avatar-editor">
-              {editingGroupAvatar ? <img src={editingGroupAvatar} className="avatar large" alt="group avatar" /> : <div className="avatar-placeholder large">{initial({ name: editingGroupName })}</div>}
-              <label className="btn-gray upload-btn">
-                Загрузить аватар
+              <label className="avatar-click">
+                {editingGroupAvatar ? <img src={editingGroupAvatar} className="avatar large" alt="group avatar" /> : <div className="avatar-placeholder large">{initial({ name: editingGroupName })}</div>}
                 <input hidden type="file" accept="image/*" onChange={(e) => uploadGroupAvatar(e.target.files?.[0])} />
               </label>
             </div>

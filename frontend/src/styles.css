@@ -222,6 +222,15 @@ a {
   margin-top: 4px;
 }
 
+.msg-forwarded {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
 .msg-actions {
   display: flex;
   gap: 6px;
@@ -345,6 +354,20 @@ a {
   padding: 10px 0;
   outline: none;
   font-size: 15px;
+}
+
+.message-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #fff;
+  padding: 10px 0;
+  outline: none;
+  font-size: 15px;
+  resize: none;
+  min-height: 22px;
+  max-height: 140px;
+  line-height: 1.35;
 }
 
 .chat-h {
@@ -689,6 +712,10 @@ a {
   }
 
   .input-wrapper input {
+    font-size: 16px;
+  }
+
+  .message-input {
     font-size: 16px;
   }
 

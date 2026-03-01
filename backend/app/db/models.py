@@ -82,6 +82,8 @@ class Message(Base):
     text: Mapped[str] = mapped_column(Text, default="")
     file_url: Mapped[str] = mapped_column(String(500), default="")
     file_mime: Mapped[str] = mapped_column(String(150), default="")
+    forwarded_from_login: Mapped[str] = mapped_column(String(128), default="")
+    forwarded_from_name: Mapped[str] = mapped_column(String(255), default="")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
