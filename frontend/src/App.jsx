@@ -63,6 +63,142 @@ function formatDeviceTime(createdAt, fallback = "") {
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
+
+function chatKey(chat) {
+  if (!chat) return "";
+  const target = chat.target ?? chat.login ?? chat.id ?? "";
+  return `${chat.is_group ? "group" : "private"}:${String(target)}`;
+}
+
+function ChatMessage({
+  m,
+  beginLongPress,
+  endLongPress,
+  openMessageMenu,
+  setImagePreviewUrl,
+  retryFailedMessage,
+  currentChatKey,
+  chatOpenedAtMs,
+}) {
+  const messageText = m.text || "";
+  const storageKey = `${currentChatKey}:${String(m.id)}`;
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      const data = JSON.parse(localStorage.getItem("expanded_msgs") || "[]");
+      return data.includes(storageKey) || data.includes(m.id);
+    } catch {
+      return false;
+    }
+  });
+  const [animated, setAnimated] = useState(() => {
+    try {
+      const data = JSON.parse(localStorage.getItem("animated_msgs") || "[]");
+      return data.includes(storageKey) || data.includes(m.id);
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (!expanded) return;
+    try {
+      const data = new Set(JSON.parse(localStorage.getItem("expanded_msgs") || "[]"));
+      data.add(storageKey);
+      localStorage.setItem("expanded_msgs", JSON.stringify([...data]));
+    } catch {}
+  }, [expanded, storageKey]);
+
+  const isLong = messageText.length > 140;
+  const collapsedText = isLong ? messageText.slice(0, 140) + "..." : messageText;
+  const createdAtMs = m.created_at ? new Date(m.created_at).getTime() : 0;
+  const hasValidCreatedAt = Number.isFinite(createdAtMs) && createdAtMs > 0;
+  const shouldAnimate =
+    !m.is_mine &&
+    !expanded &&
+    !animated &&
+    hasValidCreatedAt &&
+    chatOpenedAtMs > 0 &&
+    createdAtMs >= chatOpenedAtMs;
+
+  const [displayText, setDisplayText] = useState(() => (shouldAnimate ? "" : expanded ? messageText : collapsedText));
+
+  useEffect(() => {
+    if (!shouldAnimate) {
+      setDisplayText(expanded ? messageText : collapsedText);
+      return;
+    }
+    setDisplayText("");
+    let idx = 0;
+    const timer = setInterval(() => {
+      idx += 1;
+      setDisplayText(collapsedText.slice(0, idx));
+      if (idx >= collapsedText.length) {
+        clearInterval(timer);
+        try {
+          const data = new Set(JSON.parse(localStorage.getItem("animated_msgs") || "[]"));
+          data.add(storageKey);
+          localStorage.setItem("animated_msgs", JSON.stringify([...data]));
+        } catch {}
+        setAnimated(true);
+      }
+    }, 30);
+    return () => clearInterval(timer);
+  }, [collapsedText, expanded, messageText, shouldAnimate, storageKey]);
+
+  const handleReadMore = (e) => {
+    e.preventDefault();
+    setExpanded(true);
+  };
+
+  return (
+    <div
+      className={`msg-row ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMessageMenu(m, e);
+      }}
+      onTouchStart={(e) => beginLongPress((point) => openMessageMenu(m, point), e)}
+      onTouchEnd={endLongPress}
+      onTouchCancel={endLongPress}
+    >
+      {!m.is_mine ? (
+        m.sender_avatar_url ? (
+          <img src={m.sender_avatar_url} className="msg-avatar" alt="avatar" />
+        ) : (
+          <div className="msg-avatar-placeholder">{initial({ name: m.sender })}</div>
+        )
+      ) : null}
+      <div className={`msg ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}>
+        <div className="msg-content">
+          <div className="msg-sender">{m.sender}</div>
+          {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
+          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
+          <div className="msg-text">{displayText}</div>
+          {isLong && !expanded ? (
+            <div className="msg-readmore" onClick={handleReadMore}>
+              читать полностью
+            </div>
+          ) : null}
+          <div className="msg-meta">
+            <div className="msg-time">{m.time}</div>
+            {m.is_mine ? (
+              <div className={`msg-status ${m.is_read ? "read" : "sent"}`}>
+                {m.is_read ? ">>" : ">"}
+              </div>
+            ) : null}
+          </div>
+          {m._localStatus === "failed" ? (
+            <div className="send-failed">
+              <span className="send-failed-icon">!</span>
+              <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>Не отправлено, повторить</button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 export default function App() {
   const [auth, setAuth] = useState(() => {
     const raw = localStorage.getItem(LS_KEY);
@@ -81,6 +217,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
+  const [activeChatOpenedAtMs, setActiveChatOpenedAtMs] = useState(0);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
@@ -152,6 +289,7 @@ export default function App() {
     const u = chats.users.map((x) => ({ ...x, kind: "user", is_group: false, target: x.login }));
     return [...g, ...u];
   }, [chats]);
+  const activeChatKey = useMemo(() => chatKey(activeChat), [activeChat]);
 
   const usersFiltered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -222,6 +360,8 @@ export default function App() {
       const el = messageInputRef.current;
       requestAnimationFrame(() => {
         el.style.height = "22px";
+        el.style.overflowY = "hidden";
+        el.scrollTop = 0;
       });
     }
   }, [messageText, pendingFile]);
@@ -354,6 +494,7 @@ export default function App() {
     setUsers([]);
     setChats({ users: [], groups: [] });
     setActiveChat(null);
+    setActiveChatOpenedAtMs(0);
     setMessages([]);
     setIsMobileChat(false);
     endCall(false);
@@ -361,6 +502,7 @@ export default function App() {
 
   function openChat(chat) {
     stickToBottomRef.current = true;
+    setActiveChatOpenedAtMs(Date.now());
     setActiveChat(chat);
     clearUnreadForChat(chat);
     if (window.innerWidth <= 768) setIsMobileChat(true);
@@ -380,14 +522,18 @@ export default function App() {
 
   function autosizeMessageInput(el) {
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.height = "22px";
+    const nextHeight = Math.min(el.scrollHeight, 140);
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > 140 ? "auto" : "hidden";
   }
 
   function resetMessageInputHeight() {
     const el = messageInputRef.current;
     if (!el) return;
     el.style.height = "22px";
+    el.style.overflowY = "hidden";
+    el.scrollTop = 0;
   }
 
   async function imageFileToDataUrl(file) {
@@ -466,9 +612,10 @@ export default function App() {
     const optimistic = {
       id: `tmp-${Date.now()}`,
       sender: displayName(me),
+      sender_avatar_url: me?.avatar_url || "",
       text: messageText,
       file_url: "",
-      is_image: false,
+      is_image: pendingFile ? pendingFile.type.startsWith("image/") : false,
       forwarded_from_login: "",
       forwarded_from_name: "",
       is_mine: true,
@@ -581,7 +728,10 @@ export default function App() {
     if (!incomingCall || !me) return;
     callPeerRef.current = incomingCall.from_login;
     const chat = allChatItems.find((x) => !x.is_group && x.login === incomingCall.from_login);
-    if (chat) setActiveChat(chat);
+    if (chat) {
+      setActiveChatOpenedAtMs(Date.now());
+      setActiveChat(chat);
+    }
     connectCall(roomId(me.login, incomingCall.from_login), false);
     setIncomingCall(null);
   }
@@ -1115,30 +1265,17 @@ export default function App() {
           </div>
           <div className="messages" ref={msgListRef} onScroll={handleMessagesScroll}>
             {messages.map((m) => (
-              <div
+              <ChatMessage
                 key={m.id}
-                className={`msg ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  openMessageMenu(m, e);
-                }}
-                onTouchStart={(e) => beginLongPress((point) => openMessageMenu(m, point), e)}
-                onTouchEnd={endLongPress}
-                onTouchCancel={endLongPress}
-              >
-                <div className="msg-sender">{m.sender}</div>
-                {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
-                {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
-                <div className="msg-text">{m.text}</div>
-                <div className="msg-time">{m.time}</div>
-                {m._localStatus === "failed" ? (
-                  <div className="send-failed">
-                    <span className="send-failed-icon">!</span>
-                    <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>Не отправлено, повторить</button>
-                  </div>
-                ) : null}
-              </div>
+                m={m}
+                beginLongPress={beginLongPress}
+                endLongPress={endLongPress}
+                openMessageMenu={openMessageMenu}
+                setImagePreviewUrl={setImagePreviewUrl}
+                retryFailedMessage={retryFailedMessage}
+                currentChatKey={activeChatKey}
+                chatOpenedAtMs={activeChatOpenedAtMs}
+              />
             ))}
           </div>
           <div className="input-area">
@@ -1168,7 +1305,7 @@ export default function App() {
               {editingMessage?.id ? (
                 <button className="icon-btn" title="Отменить редактирование" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>✕</button>
               ) : null}
-              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "✓" : "🚀"}</button>
+              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "✓" : ">"}</button>
             </div>
           </div>
         </div>
@@ -1364,6 +1501,3 @@ export default function App() {
     </>
   );
 }
-
-
-

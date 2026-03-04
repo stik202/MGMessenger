@@ -397,6 +397,7 @@ async def get_messages(
         MessageOut(
             id=row.id,
             sender=build_display_name(row.sender),
+            sender_avatar_url=row.sender.avatar_url or "",
             text=row.text,
             file_url=row.file_url,
             is_image=row.file_mime.startswith("image/"),

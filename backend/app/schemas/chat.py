@@ -84,6 +84,7 @@ class ActiveChatsOut(BaseModel):
 class MessageOut(BaseModel):
     id: UUID
     sender: str
+    sender_avatar_url: str = ""
     text: str
     file_url: str
     is_image: bool
