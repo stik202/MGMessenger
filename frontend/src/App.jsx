@@ -1212,10 +1212,8 @@ export default function App() {
               className="notify-btn"
               title={!window.isSecureContext ? "Уведомления требуют HTTPS" : "Разрешить уведомления"}
               onClick={requestNotifications}
-              style={{ display: notificationPermission === "granted" || notificationPermission === "unsupported" ? "none" : "inline-flex" }}
-            >
-              🔔
-            </button>
+              style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
+            >{notificationPermission === "granted" ? "ON" : "OFF"}</button>
             <div className="plus-wrap">
               <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)}>+</button>
               {plusOpen ? (
