@@ -485,7 +485,7 @@ export default function App() {
         const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
         window.history.replaceState({}, "", nextUrl);
       }
-      if ("Notification" in window && Notification.permission === "granted" && notificationsEnabled) {
+      if ("Notification" in window && Notification.permission === "granted") {
         ensurePushSubscription(token).catch(() => {});
       }
     } catch {
@@ -1354,14 +1354,11 @@ export default function App() {
       const next = !notificationsEnabled;
       setNotificationsEnabled(next);
       localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, next ? "1" : "0");
-      if (next) {
-        try {
-          await ensurePushSubscription(token);
-        } catch (e) {
-          alert(e?.message || "Не удалось включить push-уведомления");
-        }
-      } else {
-        await unregisterPushSubscription(token);
+      try {
+        // Keep push subscription active; the bell only controls in-app notification behavior.
+        await ensurePushSubscription(token);
+      } catch (e) {
+        alert(e?.message || "Не удалось включить push-уведомления");
       }
       return;
     }
@@ -1511,7 +1508,7 @@ export default function App() {
             <div className="avatar-click" onClick={openProfile}>
               {me?.avatar_url ? <img src={me.avatar_url} className="avatar" alt="me" /> : <div className="avatar-placeholder">{initial(me)}</div>}
             </div>
-            <div className="brand">RAYS MESSENGER</div>
+            <div className="brand">RayS Messenger</div>
             <button
               className={`notify-btn ${notificationPermission === "granted" && notificationsEnabled ? "active" : "off"}`}
               title={
