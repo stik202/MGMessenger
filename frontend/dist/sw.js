@@ -13,5 +13,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow("/"));
+  const url = event.notification?.data?.url || "/";
+  event.waitUntil(clients.openWindow(url));
+});
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "MG Messenger", body: event.data.text() };
+  }
+  const title = payload.title || "MG Messenger";
+  const body = payload.body || "";
+  const data = payload.data || {};
+  const options = {
+    body,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: {
+      ...data,
+      url: data.url || "/",
+    },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
 });

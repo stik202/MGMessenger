@@ -15,6 +15,7 @@ import {
   apiGetBlockedUsers,
   apiGetMe,
   apiGetMessages,
+  apiGetPushPublicKey,
   apiGetUserInfo,
   apiOpenInvite,
   apiLogin,
@@ -24,6 +25,8 @@ import {
   apiShareContact,
   apiTransferGroupOwner,
   apiUnblockUser,
+  apiDeletePushSubscription,
+  apiRegisterPushSubscription,
   apiUpdateMessage,
   apiUpdateGroup,
   apiUpdateMe,
@@ -65,6 +68,15 @@ function formatDeviceTime(createdAt, fallback = "") {
   const d = new Date(createdAt);
   if (Number.isNaN(d.getTime())) return fallback;
   return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
 }
 
 
@@ -437,8 +449,49 @@ export default function App() {
           avatar_url: meData.avatar_url || "",
         },
       });
+      if ("Notification" in window && Notification.permission === "granted") {
+        ensurePushSubscription(token).catch(() => {});
+      }
     } catch {
       doLogout();
+    }
+  }
+
+  async function ensurePushSubscription(authToken = token) {
+    if (!authToken) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+    if (!window.isSecureContext) return;
+    if (Notification.permission !== "granted") return;
+
+    const keyInfo = await apiGetPushPublicKey();
+    if (!keyInfo?.enabled || !keyInfo?.public_key) return;
+
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyInfo.public_key),
+      });
+    }
+    await apiRegisterPushSubscription(authToken, sub.toJSON());
+  }
+
+  async function unregisterPushSubscription(authToken = token) {
+    if (!authToken) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    try {
+      await apiDeletePushSubscription(authToken, sub.endpoint);
+    } catch {
+      // ignore server errors on logout
+    }
+    try {
+      await sub.unsubscribe();
+    } catch {
+      // ignore browser errors
     }
   }
 
@@ -545,6 +598,7 @@ export default function App() {
   }
 
   function doLogout() {
+    unregisterPushSubscription(token).catch(() => {});
     localStorage.removeItem(LS_KEY);
     setAuth(null);
     setMe(null);
@@ -1246,6 +1300,15 @@ export default function App() {
     }
     const result = await Notification.requestPermission();
     setNotificationPermission(result);
+    if (result === "granted") {
+      try {
+        await ensurePushSubscription(token);
+      } catch (e) {
+        alert(e?.message || "Не удалось включить push-уведомления");
+      }
+    } else if (result === "denied") {
+      await unregisterPushSubscription(token);
+    }
   }
 
   function startPolling() {

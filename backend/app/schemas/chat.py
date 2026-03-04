@@ -200,4 +200,20 @@ class ContactInviteOpenOut(BaseModel):
     position: str
 
 
+class PushSubscriptionKeysIn(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    expirationTime: int | None = None
+    keys: PushSubscriptionKeysIn
+
+
+class PushPublicKeyOut(BaseModel):
+    public_key: str
+    enabled: bool
+
+
 TokenOut.model_rebuild()

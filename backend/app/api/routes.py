@@ -3,7 +3,7 @@ from pathlib import Path
 from secrets import token_urlsafe
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -12,7 +12,7 @@ from app.api.deps import decode_login_from_token, get_admin_user, get_current_us
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.deps import get_db
-from app.db.models import ChatGroup, ContactInvite, GroupMember, Message, User, UserBlock, UserNote
+from app.db.models import ChatGroup, ContactInvite, GroupMember, Message, PushSubscription, User, UserBlock, UserNote
 from app.db.session import AsyncSessionLocal
 from app.schemas.chat import (
     ActiveChatsOut,
@@ -33,6 +33,8 @@ from app.schemas.chat import (
     MessageEditIn,
     MessageForwardIn,
     MessageOut,
+    PushPublicKeyOut,
+    PushSubscriptionIn,
     TokenOut,
     UserInfoOut,
     UserNoteIn,
@@ -42,6 +44,7 @@ from app.schemas.chat import (
     UserShort,
 )
 from app.services.realtime import realtime_hub
+from app.services.push import is_push_enabled, send_web_push
 from app.services.utils import build_display_name
 
 
@@ -111,6 +114,61 @@ def _event_preview(text: str, file_url: str) -> str:
     return preview or "Сообщение"
 
 
+def _clean_web_push_endpoint(endpoint: str) -> str:
+    return endpoint.strip()
+
+
+async def _send_push_to_logins(
+    db: AsyncSession,
+    target_logins: list[str],
+    *,
+    title: str,
+    body: str,
+    push_data: dict,
+    exclude_logins: set[str] | None = None,
+) -> None:
+    if not is_push_enabled():
+        return
+
+    exclude = exclude_logins or set()
+    filtered = [login for login in set(target_logins) if login and login not in exclude]
+    if not filtered:
+        return
+
+    users = (await db.scalars(select(User).where(User.login.in_(filtered), User.is_blocked.is_(False)))).all()
+    user_id_by_login = {u.login: u.id for u in users}
+    if not user_id_by_login:
+        return
+
+    # If user is online in websocket, skip web push to avoid duplicate notifications.
+    offline_user_ids = [uid for login, uid in user_id_by_login.items() if not realtime_hub.has_event_connection(login)]
+    if not offline_user_ids:
+        return
+
+    subscriptions = (
+        await db.scalars(select(PushSubscription).where(PushSubscription.user_id.in_(offline_user_ids)))
+    ).all()
+    if not subscriptions:
+        return
+
+    payload = {"title": title, "body": body, "data": push_data}
+    stale_ids: list[int] = []
+    for sub in subscriptions:
+        status = await send_web_push(
+            {
+                "endpoint": sub.endpoint,
+                "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+            },
+            payload,
+        )
+        if status in (404, 410):
+            stale_ids.append(sub.id)
+
+    if stale_ids:
+        await db.execute(PushSubscription.__table__.delete().where(PushSubscription.id.in_(stale_ids)))
+        await db.commit()
+
+
 @router.post("/auth/login", response_model=TokenOut)
 async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)) -> TokenOut:
     user = await db.scalar(select(User).where(User.login == payload.login.strip()))
@@ -138,6 +196,66 @@ async def change_password(
 @router.get("/me", response_model=UserProfile)
 async def me(current_user: User = Depends(get_current_user)) -> UserProfile:
     return UserProfile.model_validate(current_user)
+
+
+@router.get("/push/public-key", response_model=PushPublicKeyOut)
+async def push_public_key() -> PushPublicKeyOut:
+    return PushPublicKeyOut(public_key=settings.vapid_public_key.strip(), enabled=is_push_enabled())
+
+
+@router.post("/push/subscriptions")
+async def register_push_subscription(
+    payload: PushSubscriptionIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if not is_push_enabled():
+        raise HTTPException(status_code=503, detail="Push уведомления не настроены на сервере")
+
+    endpoint = _clean_web_push_endpoint(payload.endpoint)
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="Пустой endpoint push-подписки")
+
+    row = await db.scalar(select(PushSubscription).where(PushSubscription.endpoint == endpoint))
+    ua = request.headers.get("user-agent", "")[:500]
+    if row:
+        row.user_id = current_user.id
+        row.p256dh = payload.keys.p256dh
+        row.auth = payload.keys.auth
+        row.user_agent = ua
+    else:
+        db.add(
+            PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=payload.keys.p256dh,
+                auth=payload.keys.auth,
+                user_agent=ua,
+            )
+        )
+    await db.commit()
+    return {"status": "success"}
+
+
+@router.delete("/push/subscriptions")
+async def delete_push_subscription(
+    endpoint: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    endpoint_clean = _clean_web_push_endpoint(endpoint)
+    if not endpoint_clean:
+        raise HTTPException(status_code=400, detail="Пустой endpoint push-подписки")
+
+    await db.execute(
+        PushSubscription.__table__.delete().where(
+            PushSubscription.user_id == current_user.id,
+            PushSubscription.endpoint == endpoint_clean,
+        )
+    )
+    await db.commit()
+    return {"status": "success"}
 
 
 @router.put("/me", response_model=UserProfile)
@@ -565,6 +683,19 @@ async def send_message(
             "preview": _event_preview(msg.text, msg.file_url),
         },
     )
+    await _send_push_to_logins(
+        db,
+        notify_logins,
+        title=build_display_name(current_user),
+        body=_event_preview(msg.text, msg.file_url),
+        push_data={
+            "type": "message:new",
+            "chat_type": chat_type,
+            "target": target,
+            "sender_login": current_user.login,
+        },
+        exclude_logins={current_user.login},
+    )
     return {"status": "success"}
 
 
@@ -690,6 +821,19 @@ async def forward_message(
             "sender_name": build_display_name(current_user),
             "preview": _event_preview(forwarded.text, forwarded.file_url),
         },
+    )
+    await _send_push_to_logins(
+        db,
+        notify_logins,
+        title=f"{build_display_name(current_user)} (переслано)",
+        body=_event_preview(forwarded.text, forwarded.file_url),
+        push_data={
+            "type": "message:new",
+            "chat_type": payload.chat_type,
+            "target": payload.target,
+            "sender_login": current_user.login,
+        },
+        exclude_logins={current_user.login},
     )
     return {"status": "success"}
 
@@ -1017,6 +1161,18 @@ async def invite_call(
             "from_name": build_display_name(current_user),
         },
     )
+    await _send_push_to_logins(
+        db,
+        [target.login],
+        title="Входящий звонок",
+        body=f"{build_display_name(current_user)} звонит вам",
+        push_data={
+            "type": "call:invite",
+            "from_login": current_user.login,
+            "from_name": build_display_name(current_user),
+        },
+        exclude_logins={current_user.login},
+    )
     return {"status": "success"}
 
 
@@ -1092,5 +1248,3 @@ async def ws_calls(websocket: WebSocket, room_id: str):
             await realtime_hub.broadcast_call(room_id, websocket, msg)
     except WebSocketDisconnect:
         realtime_hub.disconnect_call(room_id, websocket)
-
-

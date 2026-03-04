@@ -28,6 +28,9 @@ class RealtimeHub:
                 except Exception:
                     self.disconnect_events(login, ws)
 
+    def has_event_connection(self, login: str) -> bool:
+        return bool(self._event_connections.get(login))
+
     async def connect_call(self, room_id: str, ws: WebSocket) -> None:
         await ws.accept()
         self._call_rooms[room_id].add(ws)

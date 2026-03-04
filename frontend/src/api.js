@@ -274,6 +274,31 @@ export async function apiOpenInvite(token, inviteToken) {
   return response.json();
 }
 
+export async function apiGetPushPublicKey() {
+  const response = await fetch(`${API_BASE}/api/push/public-key`);
+  if (!response.ok) throw new Error("Ошибка получения push-ключа");
+  return response.json();
+}
+
+export async function apiRegisterPushSubscription(token, subscription) {
+  const response = await fetch(`${API_BASE}/api/push/subscriptions`, {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify(subscription),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка регистрации push");
+  return response.json();
+}
+
+export async function apiDeletePushSubscription(token, endpoint) {
+  const response = await fetch(`${API_BASE}/api/push/subscriptions?endpoint=${encodeURIComponent(endpoint)}`, {
+    method: "DELETE",
+    headers: headers(token),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка удаления push");
+  return response.json();
+}
+
 export function openEventsSocket(token, onMessage) {
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${window.location.host}/api/ws/events?token=${encodeURIComponent(token)}`);

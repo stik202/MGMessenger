@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     upload_base_url: str = "http://localhost:8000/uploads"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:admin@example.com"
 
 
 settings = Settings()
