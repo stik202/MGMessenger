@@ -29,6 +29,9 @@ def _send_one(subscription_info: dict[str, Any], payload_json: str) -> int | Non
         if status_code in (404, 410):
             return status_code
         return None
+    except Exception:
+        # Do not break core chat/call flow if push delivery fails for any reason.
+        return None
 
 
 async def send_web_push(subscription_info: dict[str, Any], payload: dict[str, Any]) -> int | None:

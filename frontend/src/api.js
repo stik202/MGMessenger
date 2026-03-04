@@ -4,6 +4,20 @@ function headers(token) {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+async function readErrorDetail(response, fallback) {
+  try {
+    const data = await response.json();
+    return data?.detail || fallback;
+  } catch {
+    try {
+      const text = await response.text();
+      return text || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
 export function apiBase() {
   return API_BASE;
 }
@@ -159,7 +173,7 @@ export async function apiCallInvite(token, targetLogin) {
     headers: { ...headers(token), "Content-Type": "application/json" },
     body: JSON.stringify({ target_login: targetLogin }),
   });
-  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка звонка");
+  if (!response.ok) throw new Error(await readErrorDetail(response, "Ошибка звонка"));
   return response.json();
 }
 
