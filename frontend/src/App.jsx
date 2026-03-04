@@ -37,6 +37,7 @@ import {
 
 const LS_KEY = "mgm_auth";
 const LS_CHAT_PREFS_KEY = "mgm_chat_prefs";
+const LS_NOTIFICATIONS_ENABLED_KEY = "mgm_notifications_enabled";
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 1024;
 
@@ -247,6 +248,10 @@ export default function App() {
   const [notificationPermission, setNotificationPermission] = useState(
     "Notification" in window ? Notification.permission : "unsupported"
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    const raw = localStorage.getItem(LS_NOTIFICATIONS_ENABLED_KEY);
+    return raw == null ? true : raw === "1";
+  });
 
   const [profileForm, setProfileForm] = useState(initialProfile);
   const [newPass, setNewPass] = useState("");
@@ -290,6 +295,8 @@ export default function App() {
   const [incomingCall, setIncomingCall] = useState(null);
   const [callOpen, setCallOpen] = useState(false);
   const [callStatus, setCallStatus] = useState("Ожидание");
+  const [callDurationSec, setCallDurationSec] = useState(0);
+  const [micEnabled, setMicEnabled] = useState(true);
 
   const activeChatRef = useRef(null);
   const msgListRef = useRef(null);
@@ -308,6 +315,7 @@ export default function App() {
   const swipeStartRef = useRef({ x: 0, y: 0 });
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
+  const notificationsEnabledRef = useRef(notificationsEnabled);
 
   const allChatItems = useMemo(() => {
     const g = chats.groups.map((x) => ({ ...x, kind: "group", is_group: true, target: x.id }));
@@ -410,6 +418,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    notificationsEnabledRef.current = notificationsEnabled;
+  }, [notificationsEnabled]);
+
+  useEffect(() => {
     if (!messageText && !pendingFile && messageInputRef.current) {
       const el = messageInputRef.current;
       requestAnimationFrame(() => {
@@ -425,6 +437,18 @@ export default function App() {
     const t = setTimeout(() => setCopyToast(false), 3000);
     return () => clearTimeout(t);
   }, [copyToast]);
+
+  useEffect(() => {
+    if (!callOpen) {
+      setCallDurationSec(0);
+      return;
+    }
+    const started = Date.now();
+    const t = setInterval(() => {
+      setCallDurationSec(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [callOpen]);
 
   useEffect(() => {
     if (!token || !activeChat) return;
@@ -449,7 +473,19 @@ export default function App() {
           avatar_url: meData.avatar_url || "",
         },
       });
-      if ("Notification" in window && Notification.permission === "granted") {
+      const params = new URLSearchParams(window.location.search);
+      const incomingLogin = params.get("incoming_call");
+      const incomingName = params.get("incoming_name") || incomingLogin || "";
+      if (incomingLogin) {
+        const knownChat = chatsData.users.find((u) => u.login === incomingLogin);
+        if (knownChat) setActiveChat({ ...knownChat, kind: "user", is_group: false, target: knownChat.login });
+        setIncomingCall({ from_login: incomingLogin, from_name: incomingName });
+        params.delete("incoming_call");
+        params.delete("incoming_name");
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      }
+      if ("Notification" in window && Notification.permission === "granted" && notificationsEnabled) {
         ensurePushSubscription(token).catch(() => {});
       }
     } catch {
@@ -527,13 +563,14 @@ export default function App() {
         const eventChat = event.chat_type && event.target ? { is_group: event.chat_type === "group", target: event.target } : null;
         const muted = eventChat ? isChatMuted(eventChat) : false;
         if (
+          notificationsEnabledRef.current &&
           !muted &&
           document.hidden &&
           "Notification" in window &&
           Notification.permission === "granted" &&
           event.sender_login !== me?.login
         ) {
-          new Notification(event.sender_name || "MG Messenger", {
+          new Notification(event.sender_name || "RayS Messenger", {
             body: event.preview || "New message",
           });
         }
@@ -543,6 +580,7 @@ export default function App() {
         if (isChatCallsDisabled(callChat)) return;
         setIncomingCall({ from_login: event.from_login, from_name: event.from_name });
         if (
+          notificationsEnabledRef.current &&
           !isChatMuted(callChat) &&
           document.hidden &&
           "Notification" in window &&
@@ -807,6 +845,9 @@ export default function App() {
     if (!localStreamRef.current) {
       localStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     }
+    localStreamRef.current.getAudioTracks().forEach((t) => {
+      t.enabled = micEnabled;
+    });
     localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current));
   }
 
@@ -817,10 +858,10 @@ export default function App() {
     offerSentRef.current = false;
     const ws = openCallSocket(token, room, async (msg) => {
       const pc = ensurePeer();
-      if (msg.type === "join" && initiatorRef.current && !offerSentRef.current) {
-        offerSentRef.current = true;
-        await attachMic(pc);
-        const offer = await pc.createOffer();
+        if (msg.type === "join" && initiatorRef.current && !offerSentRef.current) {
+          offerSentRef.current = true;
+          await attachMic(pc);
+          const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         ws.send(JSON.stringify({ type: "offer", sdp: offer }));
       }
@@ -894,6 +935,17 @@ export default function App() {
     }
     setCallOpen(false);
     setCallStatus("Ожидание");
+    setMicEnabled(true);
+  }
+
+  function toggleMic() {
+    const next = !micEnabled;
+    setMicEnabled(next);
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => {
+        t.enabled = next;
+      });
+    }
   }
 
   async function openProfile() {
@@ -1298,15 +1350,34 @@ export default function App() {
       alert("Уведомления работают только по HTTPS (или на localhost).");
       return;
     }
+    if (notificationPermission === "granted") {
+      const next = !notificationsEnabled;
+      setNotificationsEnabled(next);
+      localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, next ? "1" : "0");
+      if (next) {
+        try {
+          await ensurePushSubscription(token);
+        } catch (e) {
+          alert(e?.message || "Не удалось включить push-уведомления");
+        }
+      } else {
+        await unregisterPushSubscription(token);
+      }
+      return;
+    }
     const result = await Notification.requestPermission();
     setNotificationPermission(result);
     if (result === "granted") {
+      setNotificationsEnabled(true);
+      localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, "1");
       try {
         await ensurePushSubscription(token);
       } catch (e) {
         alert(e?.message || "Не удалось включить push-уведомления");
       }
     } else if (result === "denied") {
+      setNotificationsEnabled(false);
+      localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, "0");
       await unregisterPushSubscription(token);
     }
   }
@@ -1337,7 +1408,7 @@ export default function App() {
     return (
       <div className="login-screen modal" style={{ display: "flex" }}>
         <form className="card" onSubmit={doLogin}>
-          <h2 className="center">MG Messenger</h2>
+          <h2 className="center">RayS Messenger</h2>
           <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин" />
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль" />
           <button className="btn-red" type="submit">Войти</button>
@@ -1351,11 +1422,13 @@ export default function App() {
     <>
       {incomingCall ? (
         <div className="modal" style={{ display: "flex", zIndex: 9000 }}>
-          <div className="card">
+          <div className="card call-card">
             <h3>Входящий звонок</h3>
-            <div>{incomingCall.from_name || incomingCall.from_login}</div>
-            <button className="btn-blue" onClick={acceptIncomingCall}>Принять</button>
-            <button className="btn-gray" onClick={() => setIncomingCall(null)}>Отклонить</button>
+            <div className="call-peer">{incomingCall.from_name || incomingCall.from_login}</div>
+            <div className="call-actions incoming">
+              <button className="call-btn accept" onClick={acceptIncomingCall}>Ответить</button>
+              <button className="call-btn hangup" onClick={() => setIncomingCall(null)}>Отклонить</button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1364,9 +1437,17 @@ export default function App() {
         <div className="modal" style={{ display: "flex", zIndex: 8000 }}>
           <div className="card call-card">
             <h3>Голосовой звонок: {callPeerRef.current || activeChat?.name}</h3>
+            <div className="call-timer">
+              {`${String(Math.floor(callDurationSec / 60)).padStart(2, "0")}:${String(callDurationSec % 60).padStart(2, "0")}`}
+            </div>
             <div className="muted">{callStatus}</div>
             <audio ref={remoteAudioRef} autoPlay playsInline />
-            <button className="btn-red" onClick={() => endCall(true)}>Завершить</button>
+            <div className="call-actions">
+              <button className={`call-btn mic ${micEnabled ? "on" : "off"}`} onClick={toggleMic}>
+                {micEnabled ? "Микрофон: вкл" : "Микрофон: выкл"}
+              </button>
+              <button className="call-btn hangup" onClick={() => endCall(true)}>Положить трубку</button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1430,10 +1511,18 @@ export default function App() {
             <div className="avatar-click" onClick={openProfile}>
               {me?.avatar_url ? <img src={me.avatar_url} className="avatar" alt="me" /> : <div className="avatar-placeholder">{initial(me)}</div>}
             </div>
-            <div className="brand">MG MESSENGER</div>
+            <div className="brand">RAYS MESSENGER</div>
             <button
-              className={`notify-btn ${notificationPermission === "granted" ? "active" : ""}`}
-              title={!window.isSecureContext ? "Уведомления требуют HTTPS" : "Разрешить уведомления"}
+              className={`notify-btn ${notificationPermission === "granted" && notificationsEnabled ? "active" : "off"}`}
+              title={
+                !window.isSecureContext
+                  ? "Уведомления требуют HTTPS"
+                  : notificationPermission !== "granted"
+                    ? "Разрешить уведомления"
+                    : notificationsEnabled
+                      ? "Отключить уведомления"
+                      : "Включить уведомления"
+              }
               onClick={requestNotifications}
               style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
             >
@@ -1528,7 +1617,7 @@ export default function App() {
                 onInput={(e) => {
                   autosizeMessageInput(e.target);
                 }}
-                placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."}
+                placeholder={pendingFile ? `Файл: ${pendingFile.name}` : ""}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;

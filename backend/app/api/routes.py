@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from secrets import token_urlsafe
 from uuid import UUID, uuid4
@@ -1153,6 +1153,17 @@ async def invite_call(
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя звонить самому себе")
 
+    db.add(
+        Message(
+            sender_id=current_user.id,
+            receiver_user_id=target.id,
+            text="📞 Попытка звонка",
+            is_read=False,
+        )
+    )
+    await db.commit()
+    await realtime_hub.notify_users([current_user.login, target.login], {"type": "chat:update"})
+
     await realtime_hub.notify_users(
         [target.login],
         {
@@ -1170,6 +1181,7 @@ async def invite_call(
             "type": "call:invite",
             "from_login": current_user.login,
             "from_name": build_display_name(current_user),
+            "url": f"/?incoming_call={quote_plus(current_user.login)}&incoming_name={quote_plus(build_display_name(current_user))}",
         },
         exclude_logins={current_user.login},
     )

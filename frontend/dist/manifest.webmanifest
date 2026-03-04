@@ -1,12 +1,12 @@
 ﻿{
-  "name": "MG Messenger",
-  "short_name": "MGM",
+  "name": "RayS Messenger",
+  "short_name": "RayS",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#10131a",
-  "theme_color": "#7b1d1d",
-  "description": "Корпоративный мессенджер MG",
+  "background_color": "#f6c24d",
+  "theme_color": "#9bc9e9",
+  "description": "RayS Messenger",
   "icons": [
     {
       "src": "/icons/icon-192.png",

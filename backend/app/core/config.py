@@ -4,7 +4,7 @@
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "MG Messenger API"
+    app_name: str = "RayS Messenger API"
     secret_key: str = "change-me"
     access_token_expire_minutes: int = 60 * 24 * 7
     database_url: str = "postgresql+asyncpg://mg:mg@db:5432/mgmessenger"

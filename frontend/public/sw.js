@@ -23,9 +23,9 @@ self.addEventListener("push", (event) => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: "MG Messenger", body: event.data.text() };
+    payload = { title: "RayS Messenger", body: event.data.text() };
   }
-  const title = payload.title || "MG Messenger";
+  const title = payload.title || "RayS Messenger";
   const body = payload.body || "";
   const data = payload.data || {};
   const options = {

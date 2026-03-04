@@ -579,6 +579,21 @@ a {
   border-color: rgba(173, 228, 187, 0.8);
 }
 
+.notify-btn.off {
+  color: #f0b0b0;
+  border-color: rgba(240, 176, 176, 0.6);
+  position: relative;
+}
+
+.notify-btn.off::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 2px;
+  background: currentColor;
+  transform: rotate(-35deg);
+}
+
 .notify-icon {
   width: 16px;
   height: 16px;
@@ -1016,6 +1031,57 @@ a {
 
 .call-card {
   width: min(860px, 96vw);
+}
+
+.call-peer {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.call-timer {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin: 8px 0 6px;
+}
+
+.call-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.call-actions.incoming .call-btn {
+  flex: 1;
+}
+
+.call-btn {
+  flex: 1;
+  border: none;
+  border-radius: 14px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+
+.call-btn.accept {
+  background: #2ea043;
+}
+
+.call-btn.hangup {
+  background: #d83a3a;
+}
+
+.call-btn.mic.on {
+  background: #2f79ff;
+}
+
+.call-btn.mic.off {
+  background: #666;
 }
 
 .call-videos {
