@@ -41,28 +41,51 @@ def _mojibake_score(s: str) -> int:
     return sum(s.count(x) for x in markers)
 
 
+def _cyrillic_score(s: str) -> int:
+    if not s:
+        return 0
+    return sum(1 for ch in s if ("А" <= ch <= "я") or ch in {"Ё", "ё"})
+
+
 def _repair_text(value: str) -> str:
     if not value:
         return value
-    source_score = _mojibake_score(value)
     best = value
-    best_score = source_score
+    best_moji = _mojibake_score(value)
+    best_cyr = _cyrillic_score(value)
 
+    candidates: list[str] = []
+    # most common mojibake direction: utf-8 bytes decoded as cp1251/latin1
     for encoding in ["latin1", "cp1251"]:
         try:
-            candidate = value.encode(encoding, errors="strict").decode("utf-8", errors="strict")
+            candidates.append(value.encode(encoding, errors="strict").decode("utf-8", errors="strict"))
         except Exception:
-            continue
+            pass
+
+    # extra fallback for some edge cases
+    try:
+        candidates.append(value.encode("utf-8", errors="ignore").decode("cp1251", errors="ignore"))
+    except Exception:
+        pass
+
+    for candidate in candidates:
         if not candidate:
             continue
-        candidate_score = _mojibake_score(candidate)
-        if candidate_score < best_score and re.search(r"[А-Яа-яЁё]", candidate):
+        moji = _mojibake_score(candidate)
+        cyr = _cyrillic_score(candidate)
+        # Prefer less mojibake; tie-break by more Cyrillic.
+        if (moji < best_moji) or (moji == best_moji and cyr > best_cyr):
             best = candidate
-            best_score = candidate_score
+            best_moji = moji
+            best_cyr = cyr
 
-    if best != value:
-        return best
-    return value
+    # If source looks broken and candidate clearly has more Cyrillic, allow it even with equal score.
+    if best == value and best_moji > 0:
+        for candidate in candidates:
+            if _cyrillic_score(candidate) > best_cyr and _mojibake_score(candidate) <= best_moji + 1:
+                best = candidate
+                break
+    return best
 
 
 async def repair_mojibake_data() -> None:
