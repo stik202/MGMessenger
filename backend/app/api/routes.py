@@ -12,7 +12,7 @@ from app.api.deps import decode_login_from_token, get_admin_user, get_current_us
 from app.core.config import settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.deps import get_db
-from app.db.models import ChatGroup, ContactInvite, GroupMember, Message, User, UserNote
+from app.db.models import ChatGroup, ContactInvite, GroupMember, Message, User, UserBlock, UserNote
 from app.db.session import AsyncSessionLocal
 from app.schemas.chat import (
     ActiveChatsOut,
@@ -94,6 +94,16 @@ async def _message_participants_logins(db: AsyncSession, msg: Message) -> list[s
     return list(set(users))
 
 
+async def _is_blocked_by(db: AsyncSession, blocker_id: UUID, blocked_id: UUID) -> bool:
+    row = await db.scalar(
+        select(UserBlock.id).where(
+            UserBlock.blocker_user_id == blocker_id,
+            UserBlock.blocked_user_id == blocked_id,
+        )
+    )
+    return row is not None
+
+
 def _event_preview(text: str, file_url: str) -> str:
     preview = text.strip()
     if not preview and file_url:
@@ -147,6 +157,80 @@ async def update_me(
     await db.commit()
     await db.refresh(current_user)
     return UserProfile.model_validate(current_user)
+
+
+@router.get("/me/blocked", response_model=list[UserShort])
+async def get_blocked_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserShort]:
+    rows = (
+        await db.scalars(
+            select(User)
+            .join(UserBlock, UserBlock.blocked_user_id == User.id)
+            .where(UserBlock.blocker_user_id == current_user.id)
+            .order_by(User.first_name, User.last_name, User.login)
+        )
+    ).all()
+    return [
+        UserShort(
+            id=u.id,
+            login=u.login,
+            name=build_display_name(u),
+            avatar_url=u.avatar_url,
+            phone=u.phone,
+            email=u.email,
+            position=u.position,
+            unread_count=0,
+            last_message="",
+            last_time="",
+        )
+        for u in rows
+    ]
+
+
+@router.post("/me/blocked/{login}")
+async def block_user(
+    login: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    target = await db.scalar(select(User).where(User.login == login))
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя блокировать самого себя")
+    exists = await db.scalar(
+        select(UserBlock.id).where(
+            UserBlock.blocker_user_id == current_user.id,
+            UserBlock.blocked_user_id == target.id,
+        )
+    )
+    if not exists:
+        db.add(UserBlock(blocker_user_id=current_user.id, blocked_user_id=target.id))
+        await db.commit()
+    return {"status": "success"}
+
+
+@router.delete("/me/blocked/{login}")
+async def unblock_user(
+    login: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    target = await db.scalar(select(User).where(User.login == login))
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    row = await db.scalar(
+        select(UserBlock).where(
+            UserBlock.blocker_user_id == current_user.id,
+            UserBlock.blocked_user_id == target.id,
+        )
+    )
+    if row:
+        await db.delete(row)
+        await db.commit()
+    return {"status": "success"}
 
 
 @router.get("/users/search", response_model=list[UserShort])
@@ -444,6 +528,8 @@ async def send_message(
         partner = await db.scalar(select(User).where(User.login == target, User.is_blocked.is_(False)))
         if not partner:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
+        if await _is_blocked_by(db, blocker_id=partner.id, blocked_id=current_user.id):
+            raise HTTPException(status_code=403, detail="Вы заблокированы этим пользователем")
         msg.receiver_user_id = partner.id
         notify_logins.append(partner.login)
     elif chat_type == "group":
@@ -918,6 +1004,8 @@ async def invite_call(
     target = await db.scalar(select(User).where(User.login == payload.target_login, User.is_blocked.is_(False)))
     if not target:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if await _is_blocked_by(db, blocker_id=target.id, blocked_id=current_user.id):
+        raise HTTPException(status_code=403, detail="Вы заблокированы этим пользователем")
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя звонить самому себе")
 
@@ -1004,8 +1092,5 @@ async def ws_calls(websocket: WebSocket, room_id: str):
             await realtime_hub.broadcast_call(room_id, websocket, msg)
     except WebSocketDisconnect:
         realtime_hub.disconnect_call(room_id, websocket)
-
-
-
 
 

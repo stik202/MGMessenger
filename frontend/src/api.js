@@ -181,6 +181,32 @@ export async function apiSetUserNote(token, login, note) {
   return response.json();
 }
 
+export async function apiGetBlockedUsers(token) {
+  const response = await fetch(`${API_BASE}/api/me/blocked`, {
+    headers: headers(token),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка загрузки черного списка");
+  return response.json();
+}
+
+export async function apiBlockUser(token, login) {
+  const response = await fetch(`${API_BASE}/api/me/blocked/${encodeURIComponent(login)}`, {
+    method: "POST",
+    headers: headers(token),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка блокировки");
+  return response.json();
+}
+
+export async function apiUnblockUser(token, login) {
+  const response = await fetch(`${API_BASE}/api/me/blocked/${encodeURIComponent(login)}`, {
+    method: "DELETE",
+    headers: headers(token),
+  });
+  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка разблокировки");
+  return response.json();
+}
+
 export async function apiUpdateMessage(token, messageId, text) {
   const response = await fetch(`${API_BASE}/api/messages/${encodeURIComponent(messageId)}`, {
     method: "PUT",

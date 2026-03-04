@@ -157,6 +157,7 @@ a {
 .chat-title-wrap {
   margin-left: 12px;
   overflow: hidden;
+  flex: 1;
 }
 
 .chat-title {
@@ -169,6 +170,21 @@ a {
 .chat-name {
   margin-left: 10px;
   font-size: 14px;
+}
+
+.chat-more-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  margin-left: 6px;
+}
+
+.chat-more-btn:hover {
+  color: #fff;
 }
 
 .messages {
@@ -556,6 +572,21 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.notify-btn.active {
+  color: #ade4bb;
+  border-color: rgba(173, 228, 187, 0.8);
+}
+
+.notify-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .plus-menu {

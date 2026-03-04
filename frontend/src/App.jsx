@@ -6,11 +6,13 @@ import {
   apiAdminUsers,
   apiCallInvite,
   apiChangePassword,
+  apiBlockUser,
   apiCreateGroup,
   apiDeleteGroup,
   apiDeleteMessage,
   apiForwardMessage,
   apiGetActiveChats,
+  apiGetBlockedUsers,
   apiGetMe,
   apiGetMessages,
   apiGetUserInfo,
@@ -21,6 +23,7 @@ import {
   apiSetUserNote,
   apiShareContact,
   apiTransferGroupOwner,
+  apiUnblockUser,
   apiUpdateMessage,
   apiUpdateGroup,
   apiUpdateMe,
@@ -30,6 +33,7 @@ import {
 } from "./api";
 
 const LS_KEY = "mgm_auth";
+const LS_CHAT_PREFS_KEY = "mgm_chat_prefs";
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 1024;
 
@@ -172,12 +176,12 @@ function ChatMessage({
       <div className={`msg ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}>
         <div className="msg-content">
           <div className="msg-sender">{m.sender}</div>
-          {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
-          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
+          {m.forwarded_from_name ? <div className="msg-forwarded">Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РЎвЂњР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚Сћ: {m.forwarded_from_name}</div> : null}
+          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Р В Р’В Р вЂ™Р’В¤Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р вЂ™Р’В»</a>) : null}
           <div className="msg-text">{displayText}</div>
           {isLong && !expanded ? (
             <div className="msg-readmore" onClick={handleReadMore}>
-              читать полностью
+              Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РІР‚в„–
             </div>
           ) : null}
           <div className="msg-meta">
@@ -191,7 +195,7 @@ function ChatMessage({
           {m._localStatus === "failed" ? (
             <div className="send-failed">
               <span className="send-failed-icon">!</span>
-              <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>Не отправлено, повторить</button>
+              <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚Сћ, Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
             </div>
           ) : null}
         </div>
@@ -249,6 +253,15 @@ export default function App() {
   const [messageMenu, setMessageMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [copyToast, setCopyToast] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [chatPrefs, setChatPrefs] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(LS_CHAT_PREFS_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
 
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminQuery, setAdminQuery] = useState("");
@@ -264,7 +277,7 @@ export default function App() {
 
   const [incomingCall, setIncomingCall] = useState(null);
   const [callOpen, setCallOpen] = useState(false);
-  const [callStatus, setCallStatus] = useState("Ожидание");
+  const [callStatus, setCallStatus] = useState("Р В Р’В Р РЋРІР‚С”Р В Р’В Р вЂ™Р’В¶Р В Р’В Р РЋРІР‚ВР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ");
 
   const activeChatRef = useRef(null);
   const msgListRef = useRef(null);
@@ -314,6 +327,28 @@ export default function App() {
     if (!q) return adminUsers;
     return adminUsers.filter((u) => `${u.id} ${u.login} ${u.name} ${u.email} ${u.phone}`.toLowerCase().includes(q));
   }, [adminUsers, adminQuery]);
+
+  function getChatPref(item) {
+    return chatPrefs[chatKey(item)] || { muted: false, deleted: false };
+  }
+
+  function updateChatPref(item, patch) {
+    const key = chatKey(item);
+    setChatPrefs((prev) => {
+      const next = { ...prev, [key]: { ...(prev[key] || { muted: false, deleted: false }), ...patch } };
+      localStorage.setItem(LS_CHAT_PREFS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function isChatMuted(item) {
+    return !!getChatPref(item).muted;
+  }
+
+  const visibleChatItems = useMemo(
+    () => allChatItems.filter((item) => !getChatPref(item).deleted),
+    [allChatItems, chatPrefs]
+  );
 
   function isCurrentChat(item) {
     if (!activeChat) return false;
@@ -429,19 +464,33 @@ export default function App() {
           applyMessagesWithSmartScroll(normalizeServerMessages(rows));
           clearUnreadForChat(activeChatRef.current);
         }
+        const eventChat = event.chat_type && event.target ? { is_group: event.chat_type === "group", target: event.target } : null;
+        const muted = eventChat ? isChatMuted(eventChat) : false;
         if (
+          !muted &&
           document.hidden &&
           "Notification" in window &&
           Notification.permission === "granted" &&
           event.sender_login !== me?.login
         ) {
           new Notification(event.sender_name || "MG Messenger", {
-            body: event.preview || "Новое сообщение",
+            body: event.preview || "New message",
           });
         }
       }
       if (event.type === "call:invite") {
         setIncomingCall({ from_login: event.from_login, from_name: event.from_name });
+        const callChat = { is_group: false, target: event.from_login };
+        if (
+          !isChatMuted(callChat) &&
+          document.hidden &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          new Notification("Incoming call", {
+            body: `${event.from_name || event.from_login} is calling you`,
+          });
+        }
       }
     });
     ws.onopen = () => {
@@ -483,7 +532,7 @@ export default function App() {
       setLogin("");
       setPassword("");
     } catch (err) {
-      setError(err.message || "Ошибка входа");
+      setError(err.message || "Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљР’В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°");
     }
   }
 
@@ -502,6 +551,7 @@ export default function App() {
 
   function openChat(chat) {
     stickToBottomRef.current = true;
+    updateChatPref(chat, { deleted: false });
     setActiveChatOpenedAtMs(Date.now());
     setActiveChat(chat);
     clearUnreadForChat(chat);
@@ -513,9 +563,24 @@ export default function App() {
     if (window.innerWidth <= 768) setIsMobileChat(false);
   }
 
+  function withFileAccessToken(fileUrl) {
+    if (!fileUrl || !token || !String(fileUrl).includes("/uploads/")) return fileUrl;
+    try {
+      const isAbsolute = /^https?:\/\//i.test(fileUrl);
+      const u = new URL(fileUrl, window.location.origin);
+      if (!u.pathname.startsWith("/uploads/")) return fileUrl;
+      if (!u.searchParams.get("token")) u.searchParams.set("token", token);
+      return isAbsolute ? u.toString() : `${u.pathname}${u.search}${u.hash}`;
+    } catch {
+      const sep = fileUrl.includes("?") ? "&" : "?";
+      return `${fileUrl}${sep}token=${encodeURIComponent(token)}`;
+    }
+  }
+
   function normalizeServerMessages(rows) {
     return (rows || []).map((row) => ({
       ...row,
+      file_url: withFileAccessToken(row.file_url),
       time: formatDeviceTime(row.created_at, row.time || ""),
     }));
   }
@@ -540,7 +605,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Ошибка чтения файла"));
+      reader.onerror = () => reject(new Error("Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р Р‹Р Р†Р вЂљРЎвЂєР В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В°"));
       reader.readAsDataURL(file);
     });
   }
@@ -549,7 +614,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Ошибка изображения"));
+      img.onerror = () => reject(new Error("Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ"));
       img.src = dataUrl;
     });
   }
@@ -572,7 +637,7 @@ export default function App() {
       quality -= 0.1;
       blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
     }
-    if (!blob) throw new Error("Не удалось сжать изображение");
+    if (!blob) throw new Error("Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РЎвЂњР В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ");
     return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "image"}.jpg`, { type: "image/jpeg" });
   }
 
@@ -581,12 +646,12 @@ export default function App() {
     if (file.type.startsWith("image/")) {
       const prepared = await compressImage(file);
       if (prepared.size > MAX_FILE_BYTES) {
-        throw new Error("Изображение не удалось сжать до 2 МБ");
+        throw new Error("Р В Р’В Р вЂ™Р’ВР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РЎвЂњР В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚Сћ 2 Р В Р’В Р РЋРЎв„ўР В Р’В Р Р†Р вЂљР’В");
       }
       return prepared;
     }
     if (file.size > MAX_FILE_BYTES) {
-      throw new Error("Файл больше 2 МБ");
+      throw new Error("Р В Р’В Р вЂ™Р’В¤Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р вЂ™Р’В» Р В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р вЂ™Р’Вµ 2 Р В Р’В Р РЋРЎв„ўР В Р’В Р Р†Р вЂљР’В");
     }
     return file;
   }
@@ -631,9 +696,13 @@ export default function App() {
     try {
       await apiSendMessage(token, retryPayload);
     } catch (e) {
+      const errText = e?.message || "Not sent";
       setMessages((prev) =>
-        prev.map((m) => (m.id === optimistic.id ? { ...m, _localStatus: "failed", _errorText: "Не отправлено" } : m))
+        prev.map((m) => (m.id === optimistic.id ? { ...m, _localStatus: "failed", _errorText: errText } : m))
       );
+      if (String(errText).toLowerCase().includes("blocked")) {
+        alert(errText);
+      }
       return;
     }
     await Promise.all([loadMessages(chat), refreshChats()]);
@@ -645,10 +714,14 @@ export default function App() {
     try {
       await apiSendMessage(token, message._retryPayload);
       await Promise.all([loadMessages(activeChatRef.current), refreshChats()]);
-    } catch {
+    } catch (e) {
+      const errText = e?.message || "Not sent";
       setMessages((prev) =>
-        prev.map((m) => (m.id === message.id ? { ...m, _localStatus: "failed", _errorText: "Не отправлено" } : m))
+        prev.map((m) => (m.id === message.id ? { ...m, _localStatus: "failed", _errorText: errText } : m))
       );
+      if (String(errText).toLowerCase().includes("blocked")) {
+        alert(errText);
+      }
     }
   }
 
@@ -662,7 +735,7 @@ export default function App() {
     };
     pc.ontrack = (e) => {
       if (remoteAudioRef.current) remoteAudioRef.current.srcObject = e.streams[0];
-      setCallStatus("В звонке");
+      setCallStatus("Р В Р’В Р Р†Р вЂљРІвЂћСћ Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’Вµ");
     };
     peerRef.current = pc;
     return pc;
@@ -677,7 +750,7 @@ export default function App() {
 
   function connectCall(room, isInitiator) {
     setCallOpen(true);
-    setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
+    setCallStatus(isInitiator ? "Р В Р’В Р РЋРІР‚С”Р В Р’В Р вЂ™Р’В¶Р В Р’В Р РЋРІР‚ВР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°..." : "Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В РІР‚в„–Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ...");
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
     const ws = openCallSocket(token, room, async (msg) => {
@@ -698,7 +771,7 @@ export default function App() {
       }
       if (msg.type === "answer") {
         await pc.setRemoteDescription(msg.sdp);
-        setCallStatus("В звонке");
+        setCallStatus("Р В Р’В Р Р†Р вЂљРІвЂћСћ Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’Вµ");
       }
       if (msg.type === "ice" && msg.candidate) {
         try {
@@ -716,11 +789,16 @@ export default function App() {
   async function startVoiceCall() {
     if (!activeChat || activeChat.is_group) return;
     if (!window.isSecureContext) {
-      alert("Голосовые звонки в браузере работают только по HTTPS (или на localhost).");
+      alert("Р В Р’В Р Р†Р вЂљРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В Р В Р’В Р В РІР‚В  Р В Р’В Р вЂ™Р’В±Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р РЋРІР‚СљР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚в„–Р В Р Р‹Р Р†Р вЂљРЎв„ў Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚Сћ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚Сћ HTTPS (Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚В Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В° localhost).");
       return;
     }
     callPeerRef.current = activeChat.login;
-    await apiCallInvite(token, activeChat.login);
+    try {
+      await apiCallInvite(token, activeChat.login);
+    } catch (e) {
+      alert(e.message || "Call error");
+      return;
+    }
     connectCall(roomId(me.login, activeChat.login), true);
   }
 
@@ -749,11 +827,26 @@ export default function App() {
       localStreamRef.current = null;
     }
     setCallOpen(false);
-    setCallStatus("Ожидание");
+    setCallStatus("Р В Р’В Р РЋРІР‚С”Р В Р’В Р вЂ™Р’В¶Р В Р’В Р РЋРІР‚ВР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ");
   }
 
   async function openProfile() {
     setProfileOpen(true);
+  }
+
+  async function loadBlockedUsers() {
+    const rows = await apiGetBlockedUsers(token);
+    setBlockedUsers(rows || []);
+  }
+
+  async function openBlockedList() {
+    await loadBlockedUsers();
+    setBlockedOpen(true);
+  }
+
+  async function unblockLogin(loginValue) {
+    await apiUnblockUser(token, loginValue);
+    await loadBlockedUsers();
   }
 
   async function saveProfile() {
@@ -764,11 +857,11 @@ export default function App() {
   }
 
   async function submitNewPass() {
-    if (!/^\\d{4,6}$/.test(newPass)) return alert("Пароль должен быть от 4 до 6 цифр");
+    if (!/^\\d{4,6}$/.test(newPass)) return alert("Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ° Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В¶Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦ Р В Р’В Р вЂ™Р’В±Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ў 4 Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚Сћ 6 Р В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎвЂєР В Р Р‹Р В РІР‚С™");
     await apiChangePassword(token, newPass);
     setNewPass("");
     setPassOpen(false);
-    alert("Пароль изменен");
+    alert("Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦");
   }
 
   function pickMember(u) {
@@ -780,7 +873,7 @@ export default function App() {
   }
 
   async function submitGroup() {
-    if (!groupName.trim() || !selectedMembers.length) return alert("Заполните группу");
+    if (!groupName.trim() || !selectedMembers.length) return alert("Р В Р’В Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р РЋРІР‚Сљ");
     await apiCreateGroup(token, groupName.trim(), selectedMembers.map((m) => m.login));
     setGroupCreateOpen(false);
     setGroupName("");
@@ -814,7 +907,7 @@ export default function App() {
       const uploaded = await apiUploadFile(token, prepared);
       setEditingGroupAvatar(uploaded.url);
     } catch (e) {
-      alert(e.message || "Не удалось загрузить аватар");
+      alert(e.message || "Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™");
     }
   }
 
@@ -825,7 +918,7 @@ export default function App() {
       const uploaded = await apiUploadFile(token, prepared);
       setProfileForm((prev) => ({ ...prev, avatar_url: uploaded.url }));
     } catch (e) {
-      alert(e.message || "Не удалось загрузить аватар");
+      alert(e.message || "Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™");
     }
   }
 
@@ -835,7 +928,7 @@ export default function App() {
       const prepared = await prepareFileForUpload(file);
       setPendingFile(prepared);
     } catch (e) {
-      alert(e.message || "Не удалось подготовить файл");
+      alert(e.message || "Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р Р†Р вЂљРЎвЂєР В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р вЂ™Р’В»");
     }
   }
 
@@ -848,7 +941,7 @@ export default function App() {
 
   async function deleteActiveGroup() {
     if (!activeChat?.is_group) return;
-    if (!window.confirm("Удалить группу? Это действие нельзя отменить.")) return;
+    if (!window.confirm("Р В Р’В Р В РІвЂљВ¬Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р РЋРІР‚Сљ? Р В Р’В Р вЂ™Р’В­Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚Сћ Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°.")) return;
     await apiDeleteGroup(token, activeChat.id);
     setGroupSettingsOpen(false);
     setActiveChat(null);
@@ -868,7 +961,7 @@ export default function App() {
       await navigator.clipboard.writeText(link);
       setCopyToast(true);
     } catch {
-      alert("Не удалось скопировать ссылку");
+      alert("Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РЎвЂњР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СњР В Р Р‹Р РЋРІР‚Сљ");
     }
   }
 
@@ -894,13 +987,13 @@ export default function App() {
     params.delete("invite");
     const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
     window.history.replaceState({}, "", nextUrl);
-    alert(`Открыт контакт: ${opened.name}`);
+    alert(`Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ў Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ў: ${opened.name}`);
   }
 
   async function saveUserNote() {
     if (!userInfo) return;
     await apiSetUserNote(token, userInfo.login, userInfo.note || "");
-    alert("Заметка сохранена");
+    alert("Р В Р’В Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°");
   }
 
   async function editOwnMessage(message) {
@@ -916,7 +1009,7 @@ export default function App() {
   }
 
   async function deleteOwnMessage(message) {
-    if (!window.confirm("Удалить это сообщение?")) return;
+    if (!window.confirm("Р В Р’В Р В РІвЂљВ¬Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В Р Р‰Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚Сћ Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р Р†Р вЂљР’В°Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ?")) return;
     await apiDeleteMessage(token, message.id);
     await loadMessages();
   }
@@ -975,6 +1068,40 @@ export default function App() {
     });
   }
 
+  function openChatOptions(chat, point) {
+    setMessageMenu({
+      type: "chat",
+      chat,
+      x: point?.clientX ?? window.innerWidth / 2,
+      y: point?.clientY ?? window.innerHeight / 2,
+    });
+  }
+
+  function toggleChatMute(chat) {
+    const muted = isChatMuted(chat);
+    updateChatPref(chat, { muted: !muted });
+    setMessageMenu(null);
+  }
+
+  function deleteChatLocal(chat) {
+    updateChatPref(chat, { deleted: true });
+    if (activeChat && chatKey(activeChat) === chatKey(chat)) {
+      setActiveChat(null);
+      setMessages([]);
+      setIsMobileChat(false);
+    }
+    setMessageMenu(null);
+  }
+
+  async function blockChatUser(chat) {
+    if (!chat || chat.is_group) return;
+    if (!window.confirm(`Block ${chat.name || chat.login}?`)) return;
+    await apiBlockUser(token, chat.login);
+    setMessageMenu(null);
+    await loadBlockedUsers();
+    deleteChatLocal(chat);
+  }
+
   function handleMessagesScroll() {
     const node = msgListRef.current;
     if (!node) return;
@@ -1030,13 +1157,13 @@ export default function App() {
   }
 
   async function createAdminUser() {
-    if (!adminNew.login || !adminNew.password) return alert("Логин/пароль обязательны");
+    if (!adminNew.login || !adminNew.password) return alert("Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦/Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р В Р РЏР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“");
     try {
       await apiAdminCreateUser(token, adminNew);
       setAdminNew({ login: "", password: "", first_name: "", last_name: "", role: "User", is_visible: true });
       setAdminUsers(await apiAdminUsers(token, ""));
     } catch (e) {
-      alert(e.message || "Ошибка создания пользователя");
+      alert(e.message || "Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В·Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ");
     }
   }
 
@@ -1068,7 +1195,7 @@ export default function App() {
       setAdminUsers(await apiAdminUsers(token, ""));
       await refreshChats();
     } catch (e) {
-      alert(e.message || "Ошибка редактирования пользователя");
+      alert(e.message || "Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ");
     }
   }
 
@@ -1096,7 +1223,7 @@ export default function App() {
   async function requestNotifications() {
     if (!("Notification" in window)) return;
     if (!window.isSecureContext) {
-      alert("Уведомления работают только по HTTPS (или на localhost).");
+      alert("Р В Р’В Р В РІвЂљВ¬Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚в„–Р В Р Р‹Р Р†Р вЂљРЎв„ў Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚Сћ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚Сћ HTTPS (Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚В Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В° localhost).");
       return;
     }
     const result = await Notification.requestPermission();
@@ -1130,9 +1257,9 @@ export default function App() {
       <div className="login-screen modal" style={{ display: "flex" }}>
         <form className="card" onSubmit={doLogin}>
           <h2 className="center">MG Messenger</h2>
-          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль" />
-          <button className="btn-red" type="submit">Войти</button>
+          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦" />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°" />
+          <button className="btn-red" type="submit">Р В Р’В Р Р†Р вЂљРІвЂћСћР В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚В</button>
           {error ? <div className="error-text">{error}</div> : null}
         </form>
       </div>
@@ -1144,10 +1271,10 @@ export default function App() {
       {incomingCall ? (
         <div className="modal" style={{ display: "flex", zIndex: 9000 }}>
           <div className="card">
-            <h3>Входящий звонок</h3>
+            <h3>Р В Р’В Р Р†Р вЂљРІвЂћСћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р Р‹Р В Р РЏР В Р Р‹Р Р†Р вЂљР’В°Р В Р’В Р РЋРІР‚ВР В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚Сњ</h3>
             <div>{incomingCall.from_name || incomingCall.from_login}</div>
-            <button className="btn-blue" onClick={acceptIncomingCall}>Принять</button>
-            <button className="btn-gray" onClick={() => setIncomingCall(null)}>Отклонить</button>
+            <button className="btn-blue" onClick={acceptIncomingCall}>Р В Р’В Р РЋРЎСџР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦Р В Р Р‹Р В Р РЏР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
+            <button className="btn-gray" onClick={() => setIncomingCall(null)}>Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
           </div>
         </div>
       ) : null}
@@ -1155,10 +1282,10 @@ export default function App() {
       {callOpen ? (
         <div className="modal" style={{ display: "flex", zIndex: 8000 }}>
           <div className="card call-card">
-            <h3>Голосовой звонок: {callPeerRef.current || activeChat?.name}</h3>
+            <h3>Р В Р’В Р Р†Р вЂљРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚Сњ: {callPeerRef.current || activeChat?.name}</h3>
             <div className="muted">{callStatus}</div>
             <audio ref={remoteAudioRef} autoPlay playsInline />
-            <button className="btn-red" onClick={() => endCall(true)}>Завершить</button>
+            <button className="btn-red" onClick={() => endCall(true)}>Р В Р’В Р Р†Р вЂљРІР‚СњР В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
           </div>
         </div>
       ) : null}
@@ -1170,7 +1297,7 @@ export default function App() {
       ) : null}
 
       {copyToast ? (
-        <div className="copy-toast">Ссылка скопирована</div>
+        <div className="copy-toast">Р В Р’В Р В Р вЂ№Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°</div>
       ) : null}
 
       {messageMenu ? (
@@ -1184,18 +1311,28 @@ export default function App() {
             {messageMenu.type === "message" ? (
               <>
                 {messageMenu.message?.is_mine ? (
-                  <button onClick={() => { editOwnMessage(messageMenu.message); setMessageMenu(null); }}>Редактировать</button>
+                  <button onClick={() => { editOwnMessage(messageMenu.message); setMessageMenu(null); }}>Edit</button>
                 ) : null}
                 {messageMenu.message?.is_mine ? (
-                  <button onClick={() => { deleteOwnMessage(messageMenu.message); setMessageMenu(null); }}>Удалить</button>
+                  <button onClick={() => { deleteOwnMessage(messageMenu.message); setMessageMenu(null); }}>Delete</button>
                 ) : null}
                 {messageMenu.message?.text ? (
-                  <button onClick={() => { copyMessageText(messageMenu.message); setMessageMenu(null); }}>Копировать текст</button>
+                  <button onClick={() => { copyMessageText(messageMenu.message); setMessageMenu(null); }}>Copy text</button>
                 ) : null}
-                <button onClick={() => { openForwardDialog(messageMenu.message); setMessageMenu(null); }}>Переслать</button>
+                <button onClick={() => { openForwardDialog(messageMenu.message); setMessageMenu(null); }}>Forward</button>
+              </>
+            ) : messageMenu.type === "chat" ? (
+              <>
+                <button onClick={() => toggleChatMute(messageMenu.chat)}>
+                  {isChatMuted(messageMenu.chat) ? "Enable notifications" : "Mute notifications"}
+                </button>
+                <button onClick={() => deleteChatLocal(messageMenu.chat)}>Delete chat</button>
+                {!messageMenu.chat?.is_group ? (
+                  <button onClick={() => blockChatUser(messageMenu.chat)}>Block user</button>
+                ) : null}
               </>
             ) : (
-              <button onClick={() => { openUserDetails(messageMenu.login); setMessageMenu(null); }}>Открыть профиль</button>
+              <button onClick={() => { openUserDetails(messageMenu.login); setMessageMenu(null); }}>Open profile</button>
             )}
           </div>
         </div>
@@ -1209,23 +1346,28 @@ export default function App() {
             </div>
             <div className="brand">MG MESSENGER</div>
             <button
-              className="notify-btn"
-              title={!window.isSecureContext ? "Уведомления требуют HTTPS" : "Разрешить уведомления"}
+              className={`notify-btn ${notificationPermission === "granted" ? "active" : ""}`}
+              title={!window.isSecureContext ? "Р В Р’В Р В РІвЂљВ¬Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В±Р В Р Р‹Р РЋРІР‚СљР В Р Р‹Р В РІР‚в„–Р В Р Р‹Р Р†Р вЂљРЎв„ў HTTPS" : "Р В Р’В Р вЂ™Р’В Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В·Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р РЋРІР‚СљР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ"}
               onClick={requestNotifications}
               style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
-            >{notificationPermission === "granted" ? "ON" : "OFF"}</button>
+            >
+              <svg className="notify-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4a5 5 0 0 0-5 5v2.7c0 .6-.2 1.1-.6 1.6L5 15h14l-1.4-1.7c-.4-.5-.6-1-.6-1.6V9a5 5 0 0 0-5-5Z" />
+                <path d="M10 18a2 2 0 0 0 4 0" />
+              </svg>
+            </button>
             <div className="plus-wrap">
               <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)}>+</button>
               {plusOpen ? (
                 <div className="plus-menu">
-                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>Новый чат</div>
-                  <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>Создать группу</div>
+                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>Р В Р’В Р РЋРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ў</div>
+                  <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В·Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р РЋРІР‚Сљ</div>
                 </div>
               ) : null}
             </div>
           </div>
           <div className="chat-list">
-            {allChatItems.map((u) => (
+            {visibleChatItems.map((u) => (
               <div className="chat-item" key={`${u.kind}-${u.id || u.login}`} onClick={() => openChat(u)}>
                 <div
                   onClick={(e) => e.stopPropagation()}
@@ -1245,9 +1387,20 @@ export default function App() {
                   {u.avatar_url ? <img src={u.avatar_url} className="avatar" alt="avatar" /> : <div className="avatar-placeholder">{initial(u)}</div>}
                 </div>
                 <div className="chat-title-wrap">
-                  <div className="chat-title">{u.kind === "group" ? "Группа " : ""}{u.name}</div>
-                  <div className="chat-subtitle">{u.last_message || "Нет сообщений"}</div>
+                  <div className="chat-title">{u.kind === "group" ? "Р В Р’В Р Р†Р вЂљРЎС™Р В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В° " : ""}{u.name}</div>
+                  <div className="chat-subtitle">{u.last_message || "Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ў Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р Р†Р вЂљР’В°Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р Р†РІР‚С›РІР‚вЂњ"}</div>
                 </div>
+                <button
+                  className="chat-more-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openChatOptions(u, e);
+                  }}
+                  title="Chat settings"
+                >
+                  ...
+                </button>
                 {(u.unread_count ?? 0) > 0 && !isCurrentChat(u) ? <div className="badge">{(u.unread_count ?? 0) > 99 ? "99+" : u.unread_count}</div> : null}
               </div>
             ))}
@@ -1256,10 +1409,10 @@ export default function App() {
 
         <div className={`main-chat ${isMobileChat ? "mobile-active" : ""}`} onTouchStart={onChatTouchStart} onTouchEnd={onChatTouchEnd}>
           <div className="chat-h">
-            <button className="icon-btn mobile-back" onClick={goBackMobile}>←</button>
-            <span className="chat-header-title">{activeChat ? activeChat.name : "Выберите диалог"}</span>
-            <button className="icon-btn" onClick={startVoiceCall} style={{ display: activeChat && !activeChat.is_group ? "block" : "none" }}>📞</button>
-            <button className="icon-btn" onClick={openGroupSettings} style={{ display: isGroupOwner ? "block" : "none" }}>⋮</button>
+            <button className="icon-btn mobile-back" onClick={goBackMobile}>Р В Р вЂ Р Р†Р вЂљР’В Р РЋРІР‚в„ў</button>
+            <span className="chat-header-title">{activeChat ? activeChat.name : "Р В Р’В Р Р†Р вЂљРІвЂћСћР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’Вµ Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњ"}</span>
+            <button className="icon-btn" onClick={startVoiceCall} style={{ display: activeChat && !activeChat.is_group ? "block" : "none" }}>Р РЋР вЂљР РЋРЎСџР Р†Р вЂљРЎС™Р РЋРІР‚С”</button>
+            <button className="icon-btn" onClick={openGroupSettings} style={{ display: isGroupOwner ? "block" : "none" }}>Р В Р вЂ Р Р†Р вЂљРІвЂћвЂ“Р вЂ™Р’В®</button>
           </div>
           <div className="messages" ref={msgListRef} onScroll={handleMessagesScroll}>
             {messages.map((m) => (
@@ -1277,9 +1430,9 @@ export default function App() {
             ))}
           </div>
           <div className="input-area">
-            {editingMessage?.id ? <div className="edit-hint">Редактирование сообщения</div> : null}
+            {editingMessage?.id ? <div className="edit-hint">Р В Р’В Р вЂ™Р’В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р Р†Р вЂљР’В°Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ</div> : null}
             <div className="input-wrapper">
-              <label className="icon-btn">📎<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
+              <label className="icon-btn">Р РЋР вЂљР РЋРЎСџР Р†Р вЂљРЎС™Р В РІР‚в„–<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
               <textarea
                 ref={messageInputRef}
                 className="message-input"
@@ -1289,7 +1442,7 @@ export default function App() {
                 onInput={(e) => {
                   autosizeMessageInput(e.target);
                 }}
-                placeholder={pendingFile ? `Файл: ${pendingFile.name}` : "Написать..."}
+                placeholder={pendingFile ? `Р В Р’В Р вЂ™Р’В¤Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р вЂ™Р’В»: ${pendingFile.name}` : "Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РЎвЂњР В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°..."}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;
@@ -1301,9 +1454,9 @@ export default function App() {
                 }}
               />
               {editingMessage?.id ? (
-                <button className="icon-btn" title="Отменить редактирование" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>✕</button>
+                <button className="icon-btn" title="Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>Р В Р вЂ Р РЋРЎв„ўР Р†Р вЂљРЎС›</button>
               ) : null}
-              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "✓" : ">"}</button>
+              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "Р В Р вЂ Р РЋРЎв„ўР Р†Р вЂљРЎС™" : ">"}</button>
             </div>
           </div>
         </div>
@@ -1317,20 +1470,20 @@ export default function App() {
             </div>
             <h3 className="center">{userInfo.name}</h3>
             <div className="info-box">
-              <div>Логин: {userInfo.login}</div>
-              <div>Телефон: {userInfo.phone || "-"}</div>
+              <div>Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦: {userInfo.login}</div>
+              <div>Р В Р’В Р РЋРЎвЂєР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎвЂєР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦: {userInfo.phone || "-"}</div>
               <div>Email: {userInfo.email || "-"}</div>
-              <div>Должность: {userInfo.position || "-"}</div>
+              <div>Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В¶Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°: {userInfo.position || "-"}</div>
             </div>
             <textarea
               className="note-area"
               value={userInfo.note || ""}
               onChange={(e) => setUserInfo((prev) => ({ ...prev, note: e.target.value }))}
-              placeholder="Личная заметка (видна только вам)"
+              placeholder="Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В Р РЏ Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° (Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚ВР В Р’В Р СћРІР‚ВР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В° Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚Сћ Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’В)"
             />
-            <button className="btn-gray" onClick={() => shareContactLink(userInfo.login)}>Поделиться контактом</button>
-            <button className="btn-blue" onClick={saveUserNote}>Сохранить заметку</button>
-            <div className="close-txt" onClick={() => setUserInfo(null)}>закрыть</div>
+            <button className="btn-gray" onClick={() => shareContactLink(userInfo.login)}>Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р РЋР’В</button>
+            <button className="btn-blue" onClick={saveUserNote}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СњР В Р Р‹Р РЋРІР‚Сљ</button>
+            <div className="close-txt" onClick={() => setUserInfo(null)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
@@ -1338,15 +1491,15 @@ export default function App() {
       {forwardOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>Переслать сообщение</h3>
+            <h3>Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РЎвЂњР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р Р‹Р Р†Р вЂљР’В°Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ</h3>
             <div className="result-list">
               {allChatItems.map((chat) => (
                 <div key={`fw-${chat.kind}-${chat.id || chat.login}`} className="chat-item" onClick={() => forwardToChat(chat)}>
-                  <div className="chat-title">{chat.is_group ? "Группа: " : ""}{chat.name}</div>
+                  <div className="chat-title">{chat.is_group ? "Р В Р’В Р Р†Р вЂљРЎС™Р В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°: " : ""}{chat.name}</div>
                 </div>
               ))}
             </div>
-            <div className="close-txt" onClick={() => { setForwardOpen(false); setForwardMessageId(null); }}>закрыть</div>
+            <div className="close-txt" onClick={() => { setForwardOpen(false); setForwardMessageId(null); }}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
@@ -1354,10 +1507,10 @@ export default function App() {
       {searchOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>Новый чат</h3>
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Имя, телефон или почта..." />
+            <h3>Р В Р’В Р РЋРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ў</h3>
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Р В Р’В Р вЂ™Р’ВР В Р’В Р РЋР’ВР В Р Р‹Р В Р РЏ, Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎвЂєР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦ Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚В Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР Р‹Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°..." />
             <div className="result-list">{usersFiltered.map((u) => <div key={u.id} className="chat-item" onClick={() => { openChat({ ...u, is_group: false, target: u.login, kind: "user" }); setSearchOpen(false); }}>{u.name}</div>)}</div>
-            <div className="close-txt" onClick={() => setSearchOpen(false)}>закрыть</div>
+            <div className="close-txt" onClick={() => setSearchOpen(false)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
@@ -1365,13 +1518,13 @@ export default function App() {
       {groupCreateOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>Новая группа</h3>
-            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Название группы" />
-            <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="Поиск участников..." />
+            <h3>Р В Р’В Р РЋРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°</h3>
+            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“" />
+            <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚Сњ Р В Р Р‹Р РЋРІР‚СљР В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В ..." />
             <div className="result-list compact">{groupUsers.map((u) => <div key={u.id} className="chat-item" onClick={() => pickMember(u)}>{u.name}</div>)}</div>
             <div className="chip-list">{selectedMembers.map((m) => <div className="chip" key={m.login}>{m.name}<span onClick={() => dropMember(m.login)}>x</span></div>)}</div>
-            <button className="btn-blue" onClick={submitGroup}>Создать группу</button>
-            <div className="close-txt" onClick={() => setGroupCreateOpen(false)}>закрыть</div>
+            <button className="btn-blue" onClick={submitGroup}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В·Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р РЋРІР‚Сљ</button>
+            <div className="close-txt" onClick={() => setGroupCreateOpen(false)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
@@ -1385,15 +1538,15 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadGroupAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} placeholder="Название" />
-            <input value={groupEditSearch} onChange={(e) => setGroupEditSearch(e.target.value)} placeholder="Добавить участника..." />
+            <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} placeholder="Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ" />
+            <input value={groupEditSearch} onChange={(e) => setGroupEditSearch(e.target.value)} placeholder="Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р РЋРІР‚СљР В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В°..." />
             <div className="result-list compact">{groupEditUsers.map((u) => <div key={u.id} className="chat-item" onClick={() => pickMember(u)}>{u.name}</div>)}</div>
             <div className="chip-list">{selectedMembers.map((m) => <div className="chip" key={m.login}>{m.name}<span onClick={() => dropMember(m.login)}>x</span></div>)}</div>
-            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Логин нового владельца" />
-            <button className="btn-blue" onClick={saveGroupSettings}>Сохранить изменения</button>
-            <button className="btn-gray" onClick={transferGroupOwner}>Назначить владельца</button>
-            <button className="btn-red" onClick={deleteActiveGroup}>Удалить группу</button>
-            <div className="close-txt" onClick={() => setGroupSettingsOpen(false)}>закрыть</div>
+            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦ Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚Сћ Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В°Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В°" />
+            <button className="btn-blue" onClick={saveGroupSettings}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В·Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ</button>
+            <button className="btn-gray" onClick={transferGroupOwner}>Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В·Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В°Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В°</button>
+            <button className="btn-red" onClick={deleteActiveGroup}>Р В Р’В Р В РІвЂљВ¬Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚вЂќР В Р Р‹Р РЋРІР‚Сљ</button>
+            <div className="close-txt" onClick={() => setGroupSettingsOpen(false)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
@@ -1411,18 +1564,39 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadMyAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
-            <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
-            <input value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
-            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
+            <input value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р В Р’В Р вЂ™Р’В¤Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ" />
+            <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="Р В Р’В Р вЂ™Р’ВР В Р’В Р РЋР’ВР В Р Р‹Р В Р РЏ" />
+            <input value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚Сћ" />
+            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Р В Р’В Р РЋРЎвЂєР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎвЂєР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦" />
             <input value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-            <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Должность" />
-            {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
-            <button className="btn-gray" onClick={() => setPassOpen(true)}>Сменить пароль</button>
-            {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Админ настройки</button> : null}
-            <button className="btn-blue" onClick={saveProfile}>Сохранить</button>
-            <button className="btn-red" onClick={doLogout}>Выход</button>
-            <div className="close-txt" onClick={() => setProfileOpen(false)}>закрыть</div>
+            <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’В¶Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°" />
+            {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р РЋР’В</button> : null}
+            <button className="btn-gray" onClick={openBlockedList}>Blacklist</button>
+            <button className="btn-gray" onClick={() => setPassOpen(true)}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°</button>
+            {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Р В Р’В Р РЋРІР‚в„ўР В Р’В Р СћРІР‚ВР В Р’В Р РЋР’ВР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В</button> : null}
+            <button className="btn-blue" onClick={saveProfile}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
+            <button className="btn-red" onClick={doLogout}>Р В Р’В Р Р†Р вЂљРІвЂћСћР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљР’В¦Р В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚В</button>
+            <div className="close-txt" onClick={() => setProfileOpen(false)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
+          </div>
+        </div>
+      ) : null}
+
+      {blockedOpen ? (
+        <div className="modal" style={{ display: "flex" }}>
+          <div className="card">
+            <h3>Blacklist</h3>
+            <div className="result-list compact">
+              {blockedUsers.length ? blockedUsers.map((u) => (
+                <div key={u.login} className="chat-item">
+                  <div className="chat-title-wrap">
+                    <div className="chat-title">{u.name || u.login}</div>
+                    <div className="chat-subtitle">{u.login}</div>
+                  </div>
+                  <button className="mini-btn" onClick={() => unblockLogin(u.login)}>Unblock</button>
+                </div>
+              )) : <div className="muted">List is empty</div>}
+            </div>
+            <div className="close-txt" onClick={() => setBlockedOpen(false)}>close</div>
           </div>
         </div>
       ) : null}
@@ -1430,10 +1604,10 @@ export default function App() {
       {passOpen ? (
         <div className="modal" style={{ display: "flex", zIndex: 6000 }}>
           <div className="card">
-            <h3>Новый пароль</h3>
+            <h3>Р В Р’В Р РЋРЎС™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°</h3>
             <input value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="1234" />
-            <button className="btn-blue" onClick={submitNewPass}>Подтвердить</button>
-            <div className="close-txt" onClick={() => setPassOpen(false)}>отмена</div>
+            <button className="btn-blue" onClick={submitNewPass}>Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р СћРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р В РІР‚С™Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
+            <div className="close-txt" onClick={() => setPassOpen(false)}>Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°</div>
           </div>
         </div>
       ) : null}
@@ -1441,19 +1615,19 @@ export default function App() {
       {adminOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card admin-card">
-            <h3>Админ настройки</h3>
-            <input value={adminQuery} onChange={(e) => setAdminQuery(e.target.value)} placeholder="Поиск пользователя" />
+            <h3>Р В Р’В Р РЋРІР‚в„ўР В Р’В Р СћРІР‚ВР В Р’В Р РЋР’ВР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В</h3>
+            <input value={adminQuery} onChange={(e) => setAdminQuery(e.target.value)} placeholder="Р В Р’В Р РЋРЎСџР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚Сњ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ" />
             <div className="admin-create">
-              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Логин" />
-              <input value={adminNew.password} onChange={(e) => setAdminNew((p) => ({ ...p, password: e.target.value }))} placeholder="Пароль" />
-              <input value={adminNew.first_name} onChange={(e) => setAdminNew((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
-              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
+              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Р В Р’В Р Р†Р вЂљРЎвЂќР В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚ВР В Р’В Р В РІР‚В¦" />
+              <input value={adminNew.password} onChange={(e) => setAdminNew((p) => ({ ...p, password: e.target.value }))} placeholder="Р В Р’В Р РЋРЎСџР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°" />
+              <input value={adminNew.first_name} onChange={(e) => setAdminNew((p) => ({ ...p, first_name: e.target.value }))} placeholder="Р В Р’В Р вЂ™Р’ВР В Р’В Р РЋР’ВР В Р Р‹Р В Р РЏ" />
+              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р В Р’В Р вЂ™Р’В¤Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ" />
               <select value={adminNew.role} onChange={(e) => setAdminNew((p) => ({ ...p, role: e.target.value }))}><option>User</option><option>Admin</option></select>
               <select value={adminNew.is_visible ? "1" : "0"} onChange={(e) => setAdminNew((p) => ({ ...p, is_visible: e.target.value === "1" }))}>
                 <option value="1">visible</option>
                 <option value="0">hidden</option>
               </select>
-              <button className="btn-blue" onClick={createAdminUser}>Добавить</button>
+              <button className="btn-blue" onClick={createAdminUser}>Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</button>
             </div>
             <div className="admin-list">
               {adminFiltered.map((u) => (
@@ -1466,13 +1640,13 @@ export default function App() {
                       <div className="muted mini">visible: {u.is_visible ? "yes" : "no"}</div>
                     </div>
                     <div className="admin-actions">
-                      <button className="mini-btn" onClick={() => startEditUser(u)}>Ред.</button>
-                      <button className="mini-btn" onClick={() => toggleBlock(u)}>{u.is_blocked ? "Разбл" : "Блок"}</button>
+                      <button className="mini-btn" onClick={() => startEditUser(u)}>Р В Р’В Р вЂ™Р’В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚В.</button>
+                      <button className="mini-btn" onClick={() => toggleBlock(u)}>{u.is_blocked ? "Р В Р’В Р вЂ™Р’В Р В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В»" : "Р В Р’В Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚Сњ"}</button>
                     </div>
                   </div>
                   {adminEdit?.source_id === u.id ? (
                     <div className="admin-create">
-                      <h4>Редактирование пользователя</h4>
+                      <h4>Р В Р’В Р вЂ™Р’В Р В Р’В Р вЂ™Р’ВµР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚ВР В Р Р‹Р В РІР‚С™Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ</h4>
                       <input value={adminEdit.id} onChange={(e) => setAdminEdit((p) => ({ ...p, id: e.target.value }))} placeholder="id" />
                       <input value={adminEdit.login} onChange={(e) => setAdminEdit((p) => ({ ...p, login: e.target.value }))} placeholder="login" />
                       <input value={adminEdit.role} onChange={(e) => setAdminEdit((p) => ({ ...p, role: e.target.value }))} placeholder="role" />
@@ -1486,13 +1660,13 @@ export default function App() {
                       <input value={adminEdit.password} onChange={(e) => setAdminEdit((p) => ({ ...p, password: e.target.value }))} placeholder="new password" />
                       <select value={adminEdit.is_blocked ? "1" : "0"} onChange={(e) => setAdminEdit((p) => ({ ...p, is_blocked: e.target.value === "1" }))}><option value="0">active</option><option value="1">blocked</option></select>
                       <select value={adminEdit.is_visible ? "1" : "0"} onChange={(e) => setAdminEdit((p) => ({ ...p, is_visible: e.target.value === "1" }))}><option value="1">visible</option><option value="0">hidden</option></select>
-                      <button className="btn-blue" onClick={saveEditUser}>Сохранить пользователя</button>
+                      <button className="btn-blue" onClick={saveEditUser}>Р В Р’В Р В Р вЂ№Р В Р’В Р РЋРІР‚СћР В Р Р‹Р Р†Р вЂљР’В¦Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р вЂ°Р В Р’В Р вЂ™Р’В·Р В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’В°Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’ВµР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ</button>
                     </div>
                   ) : null}
                 </div>
               ))}
             </div>
-            <div className="close-txt" onClick={() => setAdminOpen(false)}>закрыть</div>
+            <div className="close-txt" onClick={() => setAdminOpen(false)}>Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚СњР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ°</div>
           </div>
         </div>
       ) : null}
