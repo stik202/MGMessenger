@@ -3,10 +3,10 @@
   "name": "RayS Messenger",
   "short_name": "RayS",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
-  "background_color": "#f6c24d",
-  "theme_color": "#9bc9e9",
+  "background_color": "#1a2a6c",
+  "theme_color": "#1a2a6c",
   "description": "RayS Messenger",
   "icons": [
     {

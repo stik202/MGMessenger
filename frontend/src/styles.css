@@ -776,6 +776,12 @@ a {
   gap: 8px;
 }
 
+.blocked-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+
 .profile-avatar-wrap {
   display: flex;
   justify-content: center;
@@ -843,8 +849,9 @@ a {
   .app-container {
     position: relative;
     width: 100%;
-    height: 100dvh;
+    height: calc(100dvh - env(safe-area-inset-top));
     margin: 0;
+    padding-top: env(safe-area-inset-top);
     display: block;
   }
 
@@ -892,6 +899,16 @@ a {
 
   .main-chat.mobile-active .messages {
     padding: 70px 12px 12px 12px;
+  }
+
+  .extra-on-landscape {
+    display: none;
+  }
+
+  @media (orientation: landscape) {
+    .extra-on-landscape {
+      display: block;
+    }
   }
 
   .messages {

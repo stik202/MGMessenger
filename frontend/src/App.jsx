@@ -1275,7 +1275,16 @@ export default function App() {
       setCopyToast(true);
       return;
     }
-    alert("Не удалось скопировать ссылку");
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Контакт", text: "Ссылка на контакт", url: link });
+        setCopyToast(true);
+        return;
+      } catch {
+        // user cancelled share sheet or browser rejected
+      }
+    }
+    window.prompt("Скопируйте ссылку:", link);
   }
 
   async function handleInviteFromUrl() {
@@ -1859,10 +1868,11 @@ export default function App() {
             </div>
             <h3 className="center">{userInfo.name}</h3>
             <div className="info-box">
-              <div>Логин: {userInfo.login}</div>
+              <div>Имя: {userInfo.name || "-"}</div>
               <div>Телефон: {userInfo.phone || "-"}</div>
-              <div>Email: {userInfo.email || "-"}</div>
-              <div>Должность: {userInfo.position || "-"}</div>
+              <div className="extra-on-landscape">Логин: {userInfo.login}</div>
+              <div className="extra-on-landscape">Email: {userInfo.email || "-"}</div>
+              <div className="extra-on-landscape">Инфо: {userInfo.position || "-"}</div>
             </div>
             <textarea
               className="note-area"
@@ -1958,10 +1968,10 @@ export default function App() {
             <input value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
             <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
             <input value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-            <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Должность" />
+            <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
             <div className="profile-actions">
               {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
-              <button className="btn-gray" onClick={openBlockedList}>Blacklist</button>
+              <button className="btn-gray" onClick={openBlockedList}>Черный список</button>
               <button className="btn-gray" onClick={() => setPassOpen(true)}>Сменить пароль</button>
               {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Админ настройки</button> : null}
               <button className="btn-blue" onClick={saveProfile}>Сохранить</button>
@@ -1975,7 +1985,7 @@ export default function App() {
       {blockedOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>Blacklist</h3>
+            <h3>Черный список</h3>
             <div className="result-list compact">
               {blockedUsers.length ? blockedUsers.map((u) => (
                 <div key={u.login} className="chat-item">
@@ -1983,11 +1993,14 @@ export default function App() {
                     <div className="chat-title">{u.name || u.login}</div>
                     <div className="chat-subtitle">{u.login}</div>
                   </div>
-                  <button className="mini-btn" onClick={() => unblockLogin(u.login)}>Unblock</button>
+                  <div className="blocked-actions">
+                    <button className="mini-btn" onClick={() => openUserDetails(u.login)}>Профиль</button>
+                    <button className="mini-btn" onClick={() => unblockLogin(u.login)}>Разблокировать</button>
+                  </div>
                 </div>
-              )) : <div className="muted">List is empty</div>}
+              )) : <div className="muted">Список пуст</div>}
             </div>
-            <div className="close-txt" onClick={() => setBlockedOpen(false)}>close</div>
+            <div className="close-txt" onClick={() => setBlockedOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
