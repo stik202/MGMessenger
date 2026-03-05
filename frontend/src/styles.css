@@ -782,6 +782,17 @@ a {
   margin-bottom: 15px;
 }
 
+.profile-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.profile-actions button {
+  margin-top: 0;
+}
+
 .note-area {
   width: 100%;
   min-height: 90px;
@@ -1048,13 +1059,14 @@ a {
 
 .call-actions {
   display: flex;
-  gap: 10px;
+  gap: 14px;
   margin-top: 10px;
   width: 100%;
+  justify-content: center;
 }
 
 .call-actions.incoming .call-btn {
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .call-btn {
@@ -1082,6 +1094,41 @@ a {
 
 .call-btn.mic.off {
   background: #666;
+}
+
+.call-btn.speaker.on {
+  background: #ff9f1a;
+}
+
+.call-btn.speaker.off {
+  background: #666;
+}
+
+.call-btn.circle {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
+  min-height: 64px;
+  border-radius: 50%;
+  padding: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-btn.circle svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+}
+
+.call-btn.accept svg {
+  transform: rotate(-30deg);
+}
+
+.call-btn.hangup svg {
+  transform: rotate(135deg);
 }
 
 .call-videos {

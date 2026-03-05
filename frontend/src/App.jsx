@@ -87,6 +87,45 @@ function chatKey(chat) {
   return `${chat.is_group ? "group" : "private"}:${String(target)}`;
 }
 
+function IconMic({ off = false }) {
+  return off ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 9a3 3 0 1 1 6 0v3a3 3 0 1 1-6 0V9Z" />
+      <path d="M6 11a6 6 0 0 0 9.8 4.7l1.4 1.4A8 8 0 0 1 4 11h2Z" />
+      <path d="M11 19h2v2h-2z" />
+      <path d="M4 4l16 16" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 15a3 3 0 0 1-3-3V7a3 3 0 1 1 6 0v5a3 3 0 0 1-3 3Z" />
+      <path d="M5 11a7 7 0 0 0 14 0h-2a5 5 0 0 1-10 0H5Z" />
+      <path d="M11 19h2v2h-2z" />
+    </svg>
+  );
+}
+
+function IconPhone() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7.1 2h3l1 4-2 2a13 13 0 0 0 6 6l2-2 4 1v3c0 1.1-.9 2-2 2C10.3 21 3 13.7 3 5a2 2 0 0 1 2-2h2.1Z" />
+    </svg>
+  );
+}
+
+function IconSpeaker({ off = false }) {
+  return off ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10h4l5-4v12l-5-4H3z" />
+      <path d="M15 9l6 6M21 9l-6 6" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 10h4l5-4v12l-5-4H3z" />
+      <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" stroke="currentColor" strokeWidth="2" fill="none" />
+    </svg>
+  );
+}
+
 function ChatMessage({
   m,
   beginLongPress,
@@ -297,6 +336,7 @@ export default function App() {
   const [callStatus, setCallStatus] = useState("Ожидание");
   const [callDurationSec, setCallDurationSec] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [speakerEnabled, setSpeakerEnabled] = useState(false);
 
   const activeChatRef = useRef(null);
   const msgListRef = useRef(null);
@@ -486,6 +526,35 @@ export default function App() {
     }
   }
 
+  async function applyAudioOutputMode(useSpeaker) {
+    const audio = remoteAudioRef.current;
+    if (!audio) return;
+    if (typeof audio.setSinkId !== "function") return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter((d) => d.kind === "audiooutput");
+      if (!outputs.length) return;
+      const score = (label = "", speaker = false) => {
+        const value = label.toLowerCase();
+        if (speaker) {
+          if (value.includes("speaker") || value.includes("hands-free") || value.includes("loud")) return 2;
+          return 0;
+        }
+        if (value.includes("earpiece") || value.includes("receiver") || value.includes("communication")) return 2;
+        if (value.includes("default")) return 1;
+        return 0;
+      };
+      const ranked = outputs
+        .map((d) => ({ d, s: score(d.label || "", useSpeaker) }))
+        .sort((a, b) => b.s - a.s);
+      const best = ranked[0]?.d;
+      if (!best) return;
+      await audio.setSinkId(best.deviceId || "default");
+    } catch {
+      // browser may not support selecting output device
+    }
+  }
+
   useEffect(() => {
     if (!messageText && !pendingFile && messageInputRef.current) {
       const el = messageInputRef.current;
@@ -514,6 +583,11 @@ export default function App() {
     }, 1000);
     return () => clearInterval(t);
   }, [callOpen]);
+
+  useEffect(() => {
+    if (!callOpen) return;
+    applyAudioOutputMode(speakerEnabled).catch(() => {});
+  }, [callOpen, speakerEnabled]);
 
   useEffect(() => {
     if (!token || !activeChat) return;
@@ -701,6 +775,7 @@ export default function App() {
       const next = { token: res.access_token, profile: res.profile };
       localStorage.setItem(LS_KEY, JSON.stringify(next));
       setAuth(next);
+      setProfileOpen(false);
       if ("Notification" in window) setNotificationPermission(Notification.permission);
       setLogin("");
       setPassword("");
@@ -719,6 +794,7 @@ export default function App() {
     setActiveChat(null);
     setActiveChatOpenedAtMs(0);
     setMessages([]);
+    setProfileOpen(false);
     setIsMobileChat(false);
     endCall(false);
   }
@@ -931,6 +1007,7 @@ export default function App() {
   function connectCall(room, isInitiator) {
     setCallOpen(true);
     setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
+    setSpeakerEnabled(false);
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
     pendingIceCandidatesRef.current = [];
@@ -1021,6 +1098,7 @@ export default function App() {
     setCallOpen(false);
     setCallStatus("Ожидание");
     setMicEnabled(true);
+    setSpeakerEnabled(false);
   }
 
   function toggleMic() {
@@ -1031,6 +1109,10 @@ export default function App() {
         t.enabled = next;
       });
     }
+  }
+
+  function toggleSpeaker() {
+    setSpeakerEnabled((prev) => !prev);
   }
 
   async function openProfile() {
@@ -1157,15 +1239,43 @@ export default function App() {
     setUserInfo(data);
   }
 
+  async function copyText(value) {
+    if (!value) return false;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch {
+        // fallback below
+      }
+    }
+    try {
+      const area = document.createElement("textarea");
+      area.value = value;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.top = "-9999px";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
   async function shareContactLink(targetLogin) {
     const shared = await apiShareContact(token, targetLogin);
     const link = `${window.location.origin}${shared.path}`;
-    try {
-      await navigator.clipboard.writeText(link);
+    const copied = await copyText(link);
+    if (copied) {
       setCopyToast(true);
-    } catch {
-      alert("Не удалось скопировать ссылку");
+      return;
     }
+    alert("Не удалось скопировать ссылку");
   }
 
   async function handleInviteFromUrl() {
@@ -1508,8 +1618,12 @@ export default function App() {
             <h3>Входящий звонок</h3>
             <div className="call-peer">{incomingCall.from_name || incomingCall.from_login}</div>
             <div className="call-actions incoming">
-              <button className="call-btn accept" onClick={acceptIncomingCall}>Ответить</button>
-              <button className="call-btn hangup" onClick={() => setIncomingCall(null)}>Отклонить</button>
+              <button className="call-btn circle accept" onClick={acceptIncomingCall} title="Ответить" aria-label="Ответить">
+                <IconPhone />
+              </button>
+              <button className="call-btn circle hangup" onClick={() => setIncomingCall(null)} title="Отклонить" aria-label="Отклонить">
+                <IconPhone />
+              </button>
             </div>
           </div>
         </div>
@@ -1525,10 +1639,25 @@ export default function App() {
             <div className="muted">{callStatus}</div>
             <audio ref={remoteAudioRef} autoPlay playsInline />
             <div className="call-actions">
-              <button className={`call-btn mic ${micEnabled ? "on" : "off"}`} onClick={toggleMic}>
-                {micEnabled ? "Микрофон: вкл" : "Микрофон: выкл"}
+              <button
+                className={`call-btn circle mic ${micEnabled ? "on" : "off"}`}
+                onClick={toggleMic}
+                title={micEnabled ? "Выключить микрофон" : "Включить микрофон"}
+                aria-label={micEnabled ? "Выключить микрофон" : "Включить микрофон"}
+              >
+                <IconMic off={!micEnabled} />
               </button>
-              <button className="call-btn hangup" onClick={() => endCall(true)}>Положить трубку</button>
+              <button
+                className={`call-btn circle speaker ${speakerEnabled ? "on" : "off"}`}
+                onClick={toggleSpeaker}
+                title={speakerEnabled ? "Выключить громкую связь" : "Включить громкую связь"}
+                aria-label={speakerEnabled ? "Выключить громкую связь" : "Включить громкую связь"}
+              >
+                <IconSpeaker off={!speakerEnabled} />
+              </button>
+              <button className="call-btn circle hangup" onClick={() => endCall(true)} title="Завершить звонок" aria-label="Завершить звонок">
+                <IconPhone />
+              </button>
             </div>
           </div>
         </div>
@@ -1574,6 +1703,9 @@ export default function App() {
                   <button onClick={() => toggleChatCalls(messageMenu.chat)}>
                     {isChatCallsDisabled(messageMenu.chat) ? "Разрешить звонки" : "Запретить звонки"}
                   </button>
+                ) : null}
+                {!messageMenu.chat?.is_group ? (
+                  <button onClick={() => { openUserDetails(messageMenu.chat.login); setMessageMenu(null); }}>Профиль</button>
                 ) : null}
                 <button onClick={() => deleteChatLocal(messageMenu.chat)}>Удалить чат</button>
                 {!messageMenu.chat?.is_group ? (
@@ -1827,12 +1959,14 @@ export default function App() {
             <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
             <input value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
             <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Должность" />
-            {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
-            <button className="btn-gray" onClick={openBlockedList}>Blacklist</button>
-            <button className="btn-gray" onClick={() => setPassOpen(true)}>Сменить пароль</button>
-            {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Админ настройки</button> : null}
-            <button className="btn-blue" onClick={saveProfile}>Сохранить</button>
-            <button className="btn-red" onClick={doLogout}>Выход</button>
+            <div className="profile-actions">
+              {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
+              <button className="btn-gray" onClick={openBlockedList}>Blacklist</button>
+              <button className="btn-gray" onClick={() => setPassOpen(true)}>Сменить пароль</button>
+              {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Админ настройки</button> : null}
+              <button className="btn-blue" onClick={saveProfile}>Сохранить</button>
+              <button className="btn-red" onClick={doLogout}>Выход</button>
+            </div>
             <div className="close-txt" onClick={() => setProfileOpen(false)}>закрыть</div>
           </div>
         </div>
