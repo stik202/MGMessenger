@@ -112,6 +112,14 @@ function IconPhone() {
   );
 }
 
+function IconPhoneEnd() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2 10.5C4.5 8.4 8 7 12 7s7.5 1.4 10 3.5l-2.2 3.7c-1.7-1.1-3.7-1.7-5.8-1.7-2.1 0-4.1.6-5.8 1.7L2 10.5z" />
+    </svg>
+  );
+}
+
 function IconSpeaker({ off = false }) {
   return off ? (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1645,7 +1653,7 @@ export default function App() {
             <div className="call-timer">
               {`${String(Math.floor(callDurationSec / 60)).padStart(2, "0")}:${String(callDurationSec % 60).padStart(2, "0")}`}
             </div>
-            <div className="muted">{callStatus}</div>
+            <div className="call-status">{callStatus}</div>
             <audio ref={remoteAudioRef} autoPlay playsInline />
             <div className="call-actions">
               <button
@@ -1665,7 +1673,7 @@ export default function App() {
                 <IconSpeaker off={!speakerEnabled} />
               </button>
               <button className="call-btn circle hangup" onClick={() => endCall(true)} title="Завершить звонок" aria-label="Завершить звонок">
-                <IconPhone />
+                <IconPhoneEnd />
               </button>
             </div>
           </div>
@@ -1731,37 +1739,43 @@ export default function App() {
       <div className="app-container">
         <div className={`sidebar ${isMobileChat ? "mobile-hidden" : ""}`}>
           <div className="side-head">
-            <div className="avatar-click" onClick={openProfile}>
-              {me?.avatar_url ? <img src={me.avatar_url} className="avatar" alt="me" /> : <div className="avatar-placeholder">{initial(me)}</div>}
-            </div>
             <div className="brand">RayS Messenger</div>
-            <button
-              className={`notify-btn ${notificationPermission === "granted" && notificationsEnabled ? "active" : "off"}`}
-              title={
-                !window.isSecureContext
-                  ? "Уведомления требуют HTTPS"
-                  : notificationPermission !== "granted"
-                    ? "Разрешить уведомления"
-                    : notificationsEnabled
-                      ? "Отключить уведомления"
-                      : "Включить уведомления"
-              }
-              onClick={requestNotifications}
-              style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
-            >
-              <svg className="notify-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 4a5 5 0 0 0-5 5v2.7c0 .6-.2 1.1-.6 1.6L5 15h14l-1.4-1.7c-.4-.5-.6-1-.6-1.6V9a5 5 0 0 0-5-5Z" />
-                <path d="M10 18a2 2 0 0 0 4 0" />
-              </svg>
-            </button>
-            <div className="plus-wrap">
-              <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)}>+</button>
+            <div className="side-actions">
+              <button
+                className={`notify-btn ${notificationPermission === "granted" && notificationsEnabled ? "active" : "off"}`}
+                title={
+                  !window.isSecureContext
+                    ? "Уведомления требуют HTTPS"
+                    : notificationPermission !== "granted"
+                      ? "Разрешить уведомления"
+                      : notificationsEnabled
+                        ? "Отключить уведомления"
+                        : "Включить уведомления"
+                }
+                onClick={requestNotifications}
+                style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
+              >
+                <svg className="notify-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 4a5 5 0 0 0-5 5v2.7c0 .6-.2 1.1-.6 1.6L5 15h14l-1.4-1.7c-.4-.5-.6-1-.6-1.6V9a5 5 0 0 0-5-5Z" />
+                  <path d="M10 18a2 2 0 0 0 4 0" />
+                </svg>
+              </button>
+              <div className="plus-wrap">
+                <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)} aria-label="Открыть меню" title="Меню">
+                  <svg className="notify-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
               {plusOpen ? (
                 <div className="plus-menu">
                   <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>Новый чат</div>
                   <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>Создать группу</div>
                 </div>
               ) : null}
+              </div>
+              <div className="avatar-click my-avatar" onClick={openProfile}>
+                {me?.avatar_url ? <img src={me.avatar_url} className="avatar" alt="me" /> : <div className="avatar-placeholder">{initial(me)}</div>}
+              </div>
             </div>
           </div>
           <div className="chat-list">
@@ -1797,7 +1811,7 @@ export default function App() {
                   }}
                   title="Настройки чата"
                 >
-                  ...
+                  ⋮
                 </button>
                 {(u.unread_count ?? 0) > 0 && !isCurrentChat(u) ? <div className="badge">{(u.unread_count ?? 0) > 99 ? "99+" : u.unread_count}</div> : null}
               </div>
@@ -1963,12 +1977,12 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadMyAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
+            <input className="profile-extra-on-landscape" value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
             <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
-            <input value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
+            <input className="profile-extra-on-landscape" value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
             <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
-            <input value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-            <input value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
+            <input className="profile-extra-on-landscape" value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
+            <input className="profile-extra-on-landscape" value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
             <div className="profile-actions">
               {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
               <button className="btn-gray" onClick={openBlockedList}>Черный список</button>

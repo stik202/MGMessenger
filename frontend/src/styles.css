@@ -19,6 +19,18 @@ body {
   overflow: hidden;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top);
+  background: #1a2a6c;
+  z-index: 9999;
+  pointer-events: none;
+}
+
 a {
   color: #fff;
 }
@@ -60,6 +72,18 @@ a {
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.side-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.my-avatar .avatar,
+.my-avatar .avatar-placeholder {
+  width: 52px;
+  height: 52px;
 }
 
 .brand {
@@ -150,6 +174,20 @@ a {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.sidebar .chat-item {
+  padding: 6px 8px;
+  border-radius: 20px;
+  margin: 2px 4px;
+  min-height: 80px;
+}
+
+.sidebar .chat-list .avatar,
+.sidebar .chat-list .avatar-placeholder {
+  width: 68px;
+  height: 68px;
+  font-size: 24px;
+}
+
 .chat-item:hover {
   background: rgba(255, 255, 255, 0.15);
 }
@@ -176,11 +214,13 @@ a {
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 18px;
+  font-size: 24px;
   line-height: 1;
-  padding: 4px 6px;
+  padding: 2px 6px;
   cursor: pointer;
   margin-left: 6px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
 }
 
 .chat-more-btn:hover {
@@ -541,8 +581,17 @@ a {
 }
 
 .plus-btn {
-  font-size: 28px;
-  line-height: 1;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 12px;
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .send-btn {
@@ -566,8 +615,8 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 12px;
   color: #fff;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -595,8 +644,8 @@ a {
 }
 
 .notify-icon {
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -714,6 +763,15 @@ a {
   font-size: 14px;
   margin-top: -4px;
   margin-bottom: 12px;
+}
+
+.call-status {
+  margin-top: 8px;
+  margin-bottom: 14px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f5f7ff;
 }
 
 .hint {
@@ -901,13 +959,15 @@ a {
     padding: 70px 12px 12px 12px;
   }
 
-  .extra-on-landscape {
-    display: none;
+  .extra-on-landscape,
+  .profile-extra-on-landscape {
+    display: none !important;
   }
 
   @media (orientation: landscape) {
-    .extra-on-landscape {
-      display: block;
+    .extra-on-landscape,
+    .profile-extra-on-landscape {
+      display: block !important;
     }
   }
 
@@ -1145,7 +1205,12 @@ a {
 }
 
 .call-btn.hangup svg {
-  transform: rotate(135deg);
+  transform: none;
+}
+
+.extra-on-landscape,
+.profile-extra-on-landscape {
+  display: block;
 }
 
 .call-videos {
