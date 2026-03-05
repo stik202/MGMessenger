@@ -316,6 +316,9 @@ export default function App() {
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
   const notificationsEnabledRef = useRef(notificationsEnabled);
+  const chatPrefsRef = useRef(chatPrefs);
+  const meRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
 
   const allChatItems = useMemo(() => {
     const g = chats.groups.map((x) => ({ ...x, kind: "group", is_group: true, target: x.id }));
@@ -420,6 +423,68 @@ export default function App() {
   useEffect(() => {
     notificationsEnabledRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
+
+  useEffect(() => {
+    chatPrefsRef.current = chatPrefs;
+  }, [chatPrefs]);
+
+  useEffect(() => {
+    meRef.current = me;
+  }, [me]);
+
+  function pushChatKeyFromEvent(event, myLogin) {
+    if (event?.type === "call:invite" && event.from_login) {
+      return `private:${String(event.from_login)}`;
+    }
+    if (event?.chat_type === "group" && event.target) {
+      return `group:${String(event.target)}`;
+    }
+    if (event?.chat_type !== "private") return "";
+    const sender = String(event.sender_login || "");
+    const target = String(event.target || "");
+    const partner = sender && myLogin && sender !== myLogin ? sender : target;
+    return partner ? `private:${String(partner)}` : "";
+  }
+
+  function syncPushSettingsToServiceWorker(loginValue = meRef.current?.login || "") {
+    if (!("serviceWorker" in navigator)) return;
+    const mutedChatKeys = Object.entries(chatPrefs || {})
+      .filter(([, pref]) => !!pref?.muted)
+      .map(([key]) => key);
+    const message = {
+      type: "push:settings",
+      settings: {
+        notificationsEnabled: !!notificationsEnabledRef.current,
+        currentLogin: String(loginValue || ""),
+        mutedChatKeys,
+      },
+    };
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        const worker = navigator.serviceWorker.controller || reg.active || reg.waiting || reg.installing;
+        worker?.postMessage(message);
+      })
+      .catch(() => {
+        // ignore if service worker is unavailable
+      });
+  }
+
+  useEffect(() => {
+    syncPushSettingsToServiceWorker(me?.login || "");
+  }, [chatPrefs, notificationsEnabled, me?.login]);
+
+  async function flushPendingIceCandidates(pc) {
+    const queued = pendingIceCandidatesRef.current;
+    if (!queued.length) return;
+    pendingIceCandidatesRef.current = [];
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch {
+        // ignore malformed/obsolete candidates
+      }
+    }
+  }
 
   useEffect(() => {
     if (!messageText && !pendingFile && messageInputRef.current) {
@@ -560,15 +625,20 @@ export default function App() {
           applyMessagesWithSmartScroll(normalizeServerMessages(rows));
           clearUnreadForChat(activeChatRef.current);
         }
-        const eventChat = event.chat_type && event.target ? { is_group: event.chat_type === "group", target: event.target } : null;
-        const muted = eventChat ? isChatMuted(eventChat) : false;
+      }
+      if (event.type === "message:new") {
+        const myLogin = meRef.current?.login || "";
+        const eventChatKey = pushChatKeyFromEvent(event, myLogin);
+        const muted = !!(eventChatKey && chatPrefsRef.current?.[eventChatKey]?.muted);
         if (
           notificationsEnabledRef.current &&
           !muted &&
           document.hidden &&
           "Notification" in window &&
           Notification.permission === "granted" &&
-          event.sender_login !== me?.login
+          !!event.sender_login &&
+          !!myLogin &&
+          event.sender_login !== myLogin
         ) {
           new Notification(event.sender_name || "RayS Messenger", {
             body: event.preview || "New message",
@@ -576,15 +646,19 @@ export default function App() {
         }
       }
       if (event.type === "call:invite") {
+        const myLogin = meRef.current?.login || "";
         const callChat = { is_group: false, target: event.from_login };
-        if (isChatCallsDisabled(callChat)) return;
+        const callPref = chatPrefsRef.current?.[chatKey(callChat)] || {};
+        if (callPref.calls_disabled) return;
         setIncomingCall({ from_login: event.from_login, from_name: event.from_name });
         if (
           notificationsEnabledRef.current &&
-          !isChatMuted(callChat) &&
+          !callPref.muted &&
           document.hidden &&
           "Notification" in window &&
-          Notification.permission === "granted"
+          Notification.permission === "granted" &&
+          !!myLogin &&
+          event.from_login !== myLogin
         ) {
           new Notification("Входящий звонок", {
             body: `${event.from_name || event.from_login} звонит вам`,
@@ -834,7 +908,10 @@ export default function App() {
       }
     };
     pc.ontrack = (e) => {
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = e.streams[0];
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = e.streams[0];
+        remoteAudioRef.current.play?.().catch(() => {});
+      }
       setCallStatus("В звонке");
     };
     peerRef.current = pc;
@@ -856,6 +933,7 @@ export default function App() {
     setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
+    pendingIceCandidatesRef.current = [];
     const ws = openCallSocket(token, room, async (msg) => {
       const pc = ensurePeer();
         if (msg.type === "join" && initiatorRef.current && !offerSentRef.current) {
@@ -868,19 +946,25 @@ export default function App() {
       if (msg.type === "offer" && !initiatorRef.current) {
         await attachMic(pc);
         await pc.setRemoteDescription(msg.sdp);
+        await flushPendingIceCandidates(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         ws.send(JSON.stringify({ type: "answer", sdp: answer }));
       }
       if (msg.type === "answer") {
         await pc.setRemoteDescription(msg.sdp);
+        await flushPendingIceCandidates(pc);
         setCallStatus("В звонке");
       }
       if (msg.type === "ice" && msg.candidate) {
-        try {
-          await pc.addIceCandidate(msg.candidate);
-        } catch {
-          // ignore
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          try {
+            await pc.addIceCandidate(msg.candidate);
+          } catch {
+            // ignore
+          }
+        } else {
+          pendingIceCandidatesRef.current.push(msg.candidate);
         }
       }
       if (msg.type === "hangup") endCall(false);
@@ -933,6 +1017,7 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    pendingIceCandidatesRef.current = [];
     setCallOpen(false);
     setCallStatus("Ожидание");
     setMicEnabled(true);
