@@ -53,10 +53,9 @@ a {
   width: 320px;
   background: linear-gradient(
     180deg,
-    rgba(38, 52, 138, 0.96) 0%,
-    rgba(19, 30, 84, 0.95) 62%,
-    rgba(11, 20, 66, 0.95) 84%,
-    rgba(237, 132, 45, 0.92) 100%
+    rgba(40, 56, 143, 0.97) 0%,
+    rgba(30, 44, 122, 0.96) 58%,
+    rgba(20, 32, 95, 0.96) 100%
   );
   backdrop-filter: blur(20px);
   border-radius: 25px;
@@ -939,6 +938,8 @@ a {
   body {
     height: 100dvh;
     overflow: hidden;
+    background: #1f2f86;
+    background-color: #1f2f86;
   }
 
   .app-container {
@@ -948,6 +949,7 @@ a {
     margin: 0;
     padding-top: 0;
     display: block;
+    background: #1f2f86;
   }
 
   .sidebar,
@@ -978,6 +980,7 @@ a {
     z-index: 3;
     transform: translateX(100%);
     transition: transform 0.3s ease;
+    background: #061247;
   }
 
   .main-chat.mobile-active {
@@ -1002,7 +1005,32 @@ a {
   }
 
   .main-chat.mobile-active .messages {
-    padding: calc(82px + env(safe-area-inset-top)) 12px 12px 12px;
+    padding: calc(82px + env(safe-area-inset-top)) 12px calc(72px + env(safe-area-inset-bottom)) 12px;
+    background: #061247;
+  }
+
+  .main-chat.mobile-active .input-area {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 120;
+    border-radius: 0;
+    background: #1a276e;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .main-chat.mobile-active .input-wrapper {
+    border-radius: 20px;
+    padding: 4px 12px;
+    gap: 10px;
+  }
+
+  .main-chat.mobile-active .message-input {
+    min-height: 18px;
+    max-height: 120px;
+    line-height: 1.25;
+    padding: 8px 0;
   }
 
   .extra-on-landscape,
