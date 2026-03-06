@@ -10,11 +10,23 @@
   box-sizing: border-box;
 }
 
+:root,
+html,
+body,
+#root {
+  background-color: #1a2a6c;
+}
+
+html {
+  background: #1a2a6c;
+}
+
 body {
   margin: 0;
   height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
+  background-color: #1a2a6c;
   color: #fff;
   overflow: hidden;
 }
@@ -219,8 +231,16 @@ a {
   padding: 2px 6px;
   cursor: pointer;
   margin-left: 6px;
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-more-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  opacity: 0.95;
 }
 
 .chat-more-btn:hover {
@@ -575,6 +595,16 @@ a {
 
 .icon-btn {
   font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.icon-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
 }
 .mobile-back {
   display: none;
@@ -694,6 +724,8 @@ a {
   padding: 30px;
   border-radius: 28px;
   width: 340px;
+  max-height: min(92dvh, 92vh);
+  overflow-y: auto;
   border: 1px solid #444;
   color: #fff;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -953,6 +985,8 @@ a {
     right: 0;
     z-index: 100;
     border-radius: 0;
+    background: #1a2a6c;
+    backdrop-filter: none;
   }
 
   .main-chat.mobile-active .messages {
@@ -1201,16 +1235,25 @@ a {
 }
 
 .call-btn.accept svg {
-  transform: rotate(-30deg);
+  transform: rotate(-10deg);
 }
 
 .call-btn.hangup svg {
-  transform: none;
+  transform: rotate(180deg);
 }
 
 .extra-on-landscape,
 .profile-extra-on-landscape {
   display: block;
+}
+
+.force-show {
+  display: block !important;
+}
+
+.details-toggle-btn {
+  position: relative;
+  z-index: 1;
 }
 
 .call-videos {
