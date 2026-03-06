@@ -246,12 +246,12 @@ function ChatMessage({
       <div className={`msg ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}>
         <div className="msg-content">
           <div className="msg-sender">{m.sender}</div>
-          {m.forwarded_from_name ? <div className="msg-forwarded">РџРµСЂРµСЃР»Р°РЅРѕ: {m.forwarded_from_name}</div> : null}
-          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Р¤Р°Р№Р»</a>) : null}
+          {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
+          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
           <div className="msg-text">{displayText}</div>
           {isLong && !expanded ? (
             <div className="msg-readmore" onClick={handleReadMore}>
-              С‡РёС‚Р°С‚СЊ РїРѕР»РЅРѕСЃС‚СЊСЋ
+              читать полностью
             </div>
           ) : null}
           <div className="msg-meta">
@@ -265,7 +265,7 @@ function ChatMessage({
           {m._localStatus === "failed" ? (
             <div className="send-failed">
               <span className="send-failed-icon">!</span>
-              <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>РќРµ РѕС‚РїСЂР°РІР»РµРЅРѕ, РїРѕРІС‚РѕСЂРёС‚СЊ</button>
+              <button className="send-failed-btn" onClick={() => retryFailedMessage(m)}>Не отправлено, повторить</button>
             </div>
           ) : null}
         </div>
@@ -353,7 +353,7 @@ export default function App() {
 
   const [incomingCall, setIncomingCall] = useState(null);
   const [callOpen, setCallOpen] = useState(false);
-  const [callStatus, setCallStatus] = useState("РћР¶РёРґР°РЅРёРµ");
+  const [callStatus, setCallStatus] = useState("Ожидание");
   const [callDurationSec, setCallDurationSec] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(false);
@@ -754,8 +754,8 @@ export default function App() {
           !!myLogin &&
           event.from_login !== myLogin
         ) {
-          new Notification("Р’С…РѕРґСЏС‰РёР№ Р·РІРѕРЅРѕРє", {
-            body: `${event.from_name || event.from_login} Р·РІРѕРЅРёС‚ РІР°Рј`,
+          new Notification("Входящий звонок", {
+            body: `${event.from_name || event.from_login} звонит вам`,
           });
         }
       }
@@ -800,7 +800,7 @@ export default function App() {
       setLogin("");
       setPassword("");
     } catch (err) {
-      setError(err.message || "РћС€РёР±РєР° РІС…РѕРґР°");
+      setError(err.message || "Ошибка входа");
     }
   }
 
@@ -875,7 +875,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("РћС€РёР±РєР° С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р°"));
+      reader.onerror = () => reject(new Error("Ошибка чтения файла"));
       reader.readAsDataURL(file);
     });
   }
@@ -884,7 +884,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("РћС€РёР±РєР° РёР·РѕР±СЂР°Р¶РµРЅРёСЏ"));
+      img.onerror = () => reject(new Error("Ошибка изображения"));
       img.src = dataUrl;
     });
   }
@@ -907,7 +907,7 @@ export default function App() {
       quality -= 0.1;
       blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
     }
-    if (!blob) throw new Error("РќРµ СѓРґР°Р»РѕСЃСЊ СЃР¶Р°С‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ");
+    if (!blob) throw new Error("Не удалось сжать изображение");
     return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "image"}.jpg`, { type: "image/jpeg" });
   }
 
@@ -916,12 +916,12 @@ export default function App() {
     if (file.type.startsWith("image/")) {
       const prepared = await compressImage(file);
       if (prepared.size > MAX_FILE_BYTES) {
-        throw new Error("РР·РѕР±СЂР°Р¶РµРЅРёРµ РЅРµ СѓРґР°Р»РѕСЃСЊ СЃР¶Р°С‚СЊ РґРѕ 2 РњР‘");
+        throw new Error("Изображение не удалось сжать до 2 МБ");
       }
       return prepared;
     }
     if (file.size > MAX_FILE_BYTES) {
-      throw new Error("Р¤Р°Р№Р» Р±РѕР»СЊС€Рµ 2 РњР‘");
+      throw new Error("Файл больше 2 МБ");
     }
     return file;
   }
@@ -1008,7 +1008,7 @@ export default function App() {
         remoteAudioRef.current.srcObject = e.streams[0];
         remoteAudioRef.current.play?.().catch(() => {});
       }
-      setCallStatus("Р’ Р·РІРѕРЅРєРµ");
+      setCallStatus("В звонке");
     };
     peerRef.current = pc;
     return pc;
@@ -1026,7 +1026,7 @@ export default function App() {
 
   function connectCall(room, isInitiator) {
     setCallOpen(true);
-    setCallStatus(isInitiator ? "РћР¶РёРґР°РЅРёРµ РѕС‚РІРµС‚Р°..." : "РџРѕРґРєР»СЋС‡РµРЅРёРµ...");
+    setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
     setSpeakerEnabled(false);
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
@@ -1051,7 +1051,7 @@ export default function App() {
       if (msg.type === "answer") {
         await pc.setRemoteDescription(msg.sdp);
         await flushPendingIceCandidates(pc);
-        setCallStatus("Р’ Р·РІРѕРЅРєРµ");
+        setCallStatus("В звонке");
       }
       if (msg.type === "ice" && msg.candidate) {
         if (pc.remoteDescription && pc.remoteDescription.type) {
@@ -1073,18 +1073,18 @@ export default function App() {
   async function startVoiceCall() {
     if (!activeChat || activeChat.is_group) return;
     if (isChatCallsDisabled(activeChat)) {
-      alert("Р—РІРѕРЅРєРё РґР»СЏ СЌС‚РѕРіРѕ С‡Р°С‚Р° РѕС‚РєР»СЋС‡РµРЅС‹");
+      alert("Звонки для этого чата отключены");
       return;
     }
     if (!window.isSecureContext) {
-      alert("Р“РѕР»РѕСЃРѕРІС‹Рµ Р·РІРѕРЅРєРё РІ Р±СЂР°СѓР·РµСЂРµ СЂР°Р±РѕС‚Р°СЋС‚ С‚РѕР»СЊРєРѕ РїРѕ HTTPS (РёР»Рё РЅР° localhost).");
+      alert("Голосовые звонки в браузере работают только по HTTPS (или на localhost).");
       return;
     }
     callPeerRef.current = activeChat.login;
     try {
       await apiCallInvite(token, activeChat.login);
     } catch (e) {
-      alert(e.message || "РћС€РёР±РєР° Р·РІРѕРЅРєР°");
+      alert(e.message || "Ошибка звонка");
       return;
     }
     connectCall(roomId(me.login, activeChat.login), true);
@@ -1116,7 +1116,7 @@ export default function App() {
     }
     pendingIceCandidatesRef.current = [];
     setCallOpen(false);
-    setCallStatus("РћР¶РёРґР°РЅРёРµ");
+    setCallStatus("Ожидание");
     setMicEnabled(true);
     setSpeakerEnabled(false);
   }
@@ -1163,11 +1163,11 @@ export default function App() {
   }
 
   async function submitNewPass() {
-    if (!/^\\d{4,6}$/.test(newPass)) return alert("РџР°СЂРѕР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕС‚ 4 РґРѕ 6 С†РёС„СЂ");
+    if (!/^\\d{4,6}$/.test(newPass)) return alert("Пароль должен быть от 4 до 6 цифр");
     await apiChangePassword(token, newPass);
     setNewPass("");
     setPassOpen(false);
-    alert("РџР°СЂРѕР»СЊ РёР·РјРµРЅРµРЅ");
+    alert("Пароль изменен");
   }
 
   function pickMember(u) {
@@ -1179,7 +1179,7 @@ export default function App() {
   }
 
   async function submitGroup() {
-    if (!groupName.trim() || !selectedMembers.length) return alert("Р—Р°РїРѕР»РЅРёС‚Рµ РіСЂСѓРїРїСѓ");
+    if (!groupName.trim() || !selectedMembers.length) return alert("Заполните группу");
     await apiCreateGroup(token, groupName.trim(), selectedMembers.map((m) => m.login));
     setGroupCreateOpen(false);
     setGroupName("");
@@ -1213,7 +1213,7 @@ export default function App() {
       const uploaded = await apiUploadFile(token, prepared);
       setEditingGroupAvatar(uploaded.url);
     } catch (e) {
-      alert(e.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ");
+      alert(e.message || "Не удалось загрузить аватар");
     }
   }
 
@@ -1224,7 +1224,7 @@ export default function App() {
       const uploaded = await apiUploadFile(token, prepared);
       setProfileForm((prev) => ({ ...prev, avatar_url: uploaded.url }));
     } catch (e) {
-      alert(e.message || "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р°РІР°С‚Р°СЂ");
+      alert(e.message || "Не удалось загрузить аватар");
     }
   }
 
@@ -1234,7 +1234,7 @@ export default function App() {
       const prepared = await prepareFileForUpload(file);
       setPendingFile(prepared);
     } catch (e) {
-      alert(e.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРіРѕС‚РѕРІРёС‚СЊ С„Р°Р№Р»");
+      alert(e.message || "Не удалось подготовить файл");
     }
   }
 
@@ -1247,7 +1247,7 @@ export default function App() {
 
   async function deleteActiveGroup() {
     if (!activeChat?.is_group) return;
-    if (!window.confirm("РЈРґР°Р»РёС‚СЊ РіСЂСѓРїРїСѓ? Р­С‚Рѕ РґРµР№СЃС‚РІРёРµ РЅРµР»СЊР·СЏ РѕС‚РјРµРЅРёС‚СЊ.")) return;
+    if (!window.confirm("Удалить группу? Это действие нельзя отменить.")) return;
     await apiDeleteGroup(token, activeChat.id);
     setGroupSettingsOpen(false);
     setActiveChat(null);
@@ -1299,14 +1299,14 @@ export default function App() {
     }
     if (navigator.share) {
       try {
-        await navigator.share({ title: "РљРѕРЅС‚Р°РєС‚", text: "РЎСЃС‹Р»РєР° РЅР° РєРѕРЅС‚Р°РєС‚", url: link });
+        await navigator.share({ title: "Контакт", text: "Ссылка на контакт", url: link });
         setCopyToast(true);
         return;
       } catch {
         // user cancelled share sheet or browser rejected
       }
     }
-    window.prompt("РЎРєРѕРїРёСЂСѓР№С‚Рµ СЃСЃС‹Р»РєСѓ:", link);
+    window.prompt("Скопируйте ссылку:", link);
   }
 
   async function handleInviteFromUrl() {
@@ -1331,13 +1331,13 @@ export default function App() {
     params.delete("invite");
     const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
     window.history.replaceState({}, "", nextUrl);
-    alert(`РћС‚РєСЂС‹С‚ РєРѕРЅС‚Р°РєС‚: ${opened.name}`);
+    alert(`Открыт контакт: ${opened.name}`);
   }
 
   async function saveUserNote() {
     if (!userInfo) return;
     await apiSetUserNote(token, userInfo.login, userInfo.note || "");
-    alert("Р—Р°РјРµС‚РєР° СЃРѕС…СЂР°РЅРµРЅР°");
+    alert("Заметка сохранена");
   }
 
   async function editOwnMessage(message) {
@@ -1353,7 +1353,7 @@ export default function App() {
   }
 
   async function deleteOwnMessage(message) {
-    if (!window.confirm("РЈРґР°Р»РёС‚СЊ СЌС‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ?")) return;
+    if (!window.confirm("Удалить это сообщение?")) return;
     await apiDeleteMessage(token, message.id);
     await loadMessages();
   }
@@ -1445,7 +1445,7 @@ export default function App() {
 
   async function blockChatUser(chat) {
     if (!chat || chat.is_group) return;
-    if (!window.confirm(`Р—Р°Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ ${chat.name || chat.login}?`)) return;
+    if (!window.confirm(`Заблокировать ${chat.name || chat.login}?`)) return;
     await apiBlockUser(token, chat.login);
     setMessageMenu(null);
     await loadBlockedUsers();
@@ -1507,13 +1507,13 @@ export default function App() {
   }
 
   async function createAdminUser() {
-    if (!adminNew.login || !adminNew.password) return alert("Р›РѕРіРёРЅ/РїР°СЂРѕР»СЊ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹");
+    if (!adminNew.login || !adminNew.password) return alert("Логин/пароль обязательны");
     try {
       await apiAdminCreateUser(token, adminNew);
       setAdminNew({ login: "", password: "", first_name: "", last_name: "", role: "User", is_visible: true });
       setAdminUsers(await apiAdminUsers(token, ""));
     } catch (e) {
-      alert(e.message || "РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ");
+      alert(e.message || "Ошибка создания пользователя");
     }
   }
 
@@ -1545,7 +1545,7 @@ export default function App() {
       setAdminUsers(await apiAdminUsers(token, ""));
       await refreshChats();
     } catch (e) {
-      alert(e.message || "РћС€РёР±РєР° СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ");
+      alert(e.message || "Ошибка редактирования пользователя");
     }
   }
 
@@ -1573,7 +1573,7 @@ export default function App() {
   async function requestNotifications() {
     if (!("Notification" in window)) return;
     if (!window.isSecureContext) {
-      alert("РЈРІРµРґРѕРјР»РµРЅРёСЏ СЂР°Р±РѕС‚Р°СЋС‚ С‚РѕР»СЊРєРѕ РїРѕ HTTPS (РёР»Рё РЅР° localhost).");
+      alert("Уведомления работают только по HTTPS (или на localhost).");
       return;
     }
     if (notificationPermission === "granted") {
@@ -1584,7 +1584,7 @@ export default function App() {
         // Keep push subscription active; the bell only controls in-app notification behavior.
         await ensurePushSubscription(token);
       } catch (e) {
-        alert(e?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РІРєР»СЋС‡РёС‚СЊ push-СѓРІРµРґРѕРјР»РµРЅРёСЏ");
+        alert(e?.message || "Не удалось включить push-уведомления");
       }
       return;
     }
@@ -1596,7 +1596,7 @@ export default function App() {
       try {
         await ensurePushSubscription(token);
       } catch (e) {
-        alert(e?.message || "РќРµ СѓРґР°Р»РѕСЃСЊ РІРєР»СЋС‡РёС‚СЊ push-СѓРІРµРґРѕРјР»РµРЅРёСЏ");
+        alert(e?.message || "Не удалось включить push-уведомления");
       }
     } else if (result === "denied") {
       setNotificationsEnabled(false);
@@ -1632,9 +1632,9 @@ export default function App() {
       <div className="login-screen modal" style={{ display: "flex" }}>
         <form className="card" onSubmit={doLogin}>
           <h2 className="center">RayS Messenger</h2>
-          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Р›РѕРіРёРЅ" />
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="РџР°СЂРѕР»СЊ" />
-          <button className="btn-red" type="submit">Р’РѕР№С‚Рё</button>
+          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин" />
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль" />
+          <button className="btn-red" type="submit">Войти</button>
           {error ? <div className="error-text">{error}</div> : null}
         </form>
       </div>
@@ -1646,13 +1646,13 @@ export default function App() {
       {incomingCall ? (
         <div className="modal" style={{ display: "flex", zIndex: 9000 }}>
           <div className="card call-card">
-            <h3>Р’С…РѕРґСЏС‰РёР№ Р·РІРѕРЅРѕРє</h3>
+            <h3>Входящий звонок</h3>
             <div className="call-peer">{incomingCall.from_name || incomingCall.from_login}</div>
             <div className="call-actions incoming">
-              <button className="call-btn circle accept" onClick={acceptIncomingCall} title="РћС‚РІРµС‚РёС‚СЊ" aria-label="РћС‚РІРµС‚РёС‚СЊ">
+              <button className="call-btn circle accept" onClick={acceptIncomingCall} title="Ответить" aria-label="Ответить">
                 <IconPhone />
               </button>
-              <button className="call-btn circle hangup" onClick={() => setIncomingCall(null)} title="РћС‚РєР»РѕРЅРёС‚СЊ" aria-label="РћС‚РєР»РѕРЅРёС‚СЊ">
+              <button className="call-btn circle hangup" onClick={() => setIncomingCall(null)} title="Отклонить" aria-label="Отклонить">
                 <IconPhone />
               </button>
             </div>
@@ -1663,7 +1663,7 @@ export default function App() {
       {callOpen ? (
         <div className="modal" style={{ display: "flex", zIndex: 8000 }}>
           <div className="card call-card">
-            <h3>Р“РѕР»РѕСЃРѕРІРѕР№ Р·РІРѕРЅРѕРє: {callPeerRef.current || activeChat?.name}</h3>
+            <h3>Голосовой звонок: {callPeerRef.current || activeChat?.name}</h3>
             <div className="call-timer">
               {`${String(Math.floor(callDurationSec / 60)).padStart(2, "0")}:${String(callDurationSec % 60).padStart(2, "0")}`}
             </div>
@@ -1673,20 +1673,20 @@ export default function App() {
               <button
                 className={`call-btn circle mic ${micEnabled ? "on" : "off"}`}
                 onClick={toggleMic}
-                title={micEnabled ? "Р’С‹РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ" : "Р’РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ"}
-                aria-label={micEnabled ? "Р’С‹РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ" : "Р’РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ"}
+                title={micEnabled ? "Выключить микрофон" : "Включить микрофон"}
+                aria-label={micEnabled ? "Выключить микрофон" : "Включить микрофон"}
               >
                 <IconMic off={!micEnabled} />
               </button>
               <button
                 className={`call-btn circle speaker ${speakerEnabled ? "on" : "off"}`}
                 onClick={toggleSpeaker}
-                title={speakerEnabled ? "Р’С‹РєР»СЋС‡РёС‚СЊ РіСЂРѕРјРєСѓСЋ СЃРІСЏР·СЊ" : "Р’РєР»СЋС‡РёС‚СЊ РіСЂРѕРјРєСѓСЋ СЃРІСЏР·СЊ"}
-                aria-label={speakerEnabled ? "Р’С‹РєР»СЋС‡РёС‚СЊ РіСЂРѕРјРєСѓСЋ СЃРІСЏР·СЊ" : "Р’РєР»СЋС‡РёС‚СЊ РіСЂРѕРјРєСѓСЋ СЃРІСЏР·СЊ"}
+                title={speakerEnabled ? "Выключить громкую связь" : "Включить громкую связь"}
+                aria-label={speakerEnabled ? "Выключить громкую связь" : "Включить громкую связь"}
               >
                 <IconSpeaker off={!speakerEnabled} />
               </button>
-              <button className="call-btn circle hangup" onClick={() => endCall(true)} title="Р—Р°РІРµСЂС€РёС‚СЊ Р·РІРѕРЅРѕРє" aria-label="Р—Р°РІРµСЂС€РёС‚СЊ Р·РІРѕРЅРѕРє">
+              <button className="call-btn circle hangup" onClick={() => endCall(true)} title="Завершить звонок" aria-label="Завершить звонок">
                 <IconPhoneEnd />
               </button>
             </div>
@@ -1701,7 +1701,7 @@ export default function App() {
       ) : null}
 
       {copyToast ? (
-        <div className="copy-toast">РЎСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°</div>
+        <div className="copy-toast">Ссылка скопирована</div>
       ) : null}
 
       {messageMenu ? (
@@ -1728,19 +1728,19 @@ export default function App() {
             ) : messageMenu.type === "chat" ? (
               <>
                 <button onClick={() => toggleChatMute(messageMenu.chat)}>
-                  {isChatMuted(messageMenu.chat) ? "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ" : "РћС‚РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"}
+                  {isChatMuted(messageMenu.chat) ? "Включить уведомления" : "Отключить уведомления"}
                 </button>
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => toggleChatCalls(messageMenu.chat)}>
-                    {isChatCallsDisabled(messageMenu.chat) ? "Р Р°Р·СЂРµС€РёС‚СЊ Р·РІРѕРЅРєРё" : "Р—Р°РїСЂРµС‚РёС‚СЊ Р·РІРѕРЅРєРё"}
+                    {isChatCallsDisabled(messageMenu.chat) ? "Разрешить звонки" : "Запретить звонки"}
                   </button>
                 ) : null}
                 {!messageMenu.chat?.is_group ? (
-                  <button onClick={() => { openUserDetails(messageMenu.chat.login); setMessageMenu(null); }}>РџСЂРѕС„РёР»СЊ</button>
+                  <button onClick={() => { openUserDetails(messageMenu.chat.login); setMessageMenu(null); }}>Профиль</button>
                 ) : null}
-                <button onClick={() => deleteChatLocal(messageMenu.chat)}>РЈРґР°Р»РёС‚СЊ С‡Р°С‚</button>
+                <button onClick={() => deleteChatLocal(messageMenu.chat)}>Удалить чат</button>
                 {!messageMenu.chat?.is_group ? (
-                  <button onClick={() => blockChatUser(messageMenu.chat)}>Р—Р°Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ</button>
+                  <button onClick={() => blockChatUser(messageMenu.chat)}>Заблокировать пользователя</button>
                 ) : null}
               </>
             ) : (
@@ -1759,12 +1759,12 @@ export default function App() {
                 className={`notify-btn ${notificationPermission === "granted" && notificationsEnabled ? "active" : "off"}`}
                 title={
                   !window.isSecureContext
-                    ? "РЈРІРµРґРѕРјР»РµРЅРёСЏ С‚СЂРµР±СѓСЋС‚ HTTPS"
+                    ? "Уведомления требуют HTTPS"
                     : notificationPermission !== "granted"
-                      ? "Р Р°Р·СЂРµС€РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"
+                      ? "Разрешить уведомления"
                       : notificationsEnabled
-                        ? "РћС‚РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"
-                        : "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"
+                        ? "Отключить уведомления"
+                        : "Включить уведомления"
                 }
                 onClick={requestNotifications}
                 style={{ display: notificationPermission === "unsupported" ? "none" : "inline-flex" }}
@@ -1775,15 +1775,15 @@ export default function App() {
                 </svg>
               </button>
               <div className="plus-wrap">
-                <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)} aria-label="РћС‚РєСЂС‹С‚СЊ РјРµРЅСЋ" title="РњРµРЅСЋ">
+                <button className="plus-btn" onClick={() => setPlusOpen((v) => !v)} aria-label="Открыть меню" title="Меню">
                   <svg className="notify-icon" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
               {plusOpen ? (
                 <div className="plus-menu">
-                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>РќРѕРІС‹Р№ С‡Р°С‚</div>
-                  <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>РЎРѕР·РґР°С‚СЊ РіСЂСѓРїРїСѓ</div>
+                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>Новый чат</div>
+                  <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>Создать группу</div>
                 </div>
               ) : null}
               </div>
@@ -1813,8 +1813,8 @@ export default function App() {
                   {u.avatar_url ? <img src={u.avatar_url} className="avatar" alt="avatar" /> : <div className="avatar-placeholder">{initial(u)}</div>}
                 </div>
                 <div className="chat-title-wrap">
-                  <div className="chat-title">{u.kind === "group" ? "Р“СЂСѓРїРїР° " : ""}{u.name}</div>
-                  <div className="chat-subtitle">{u.last_message || "РќРµС‚ СЃРѕРѕР±С‰РµРЅРёР№"}</div>
+                  <div className="chat-title">{u.kind === "group" ? "Группа " : ""}{u.name}</div>
+                  <div className="chat-subtitle">{u.last_message || "Нет сообщений"}</div>
                 </div>
                 <button
                   className="chat-more-btn"
@@ -1835,8 +1835,8 @@ export default function App() {
 
         <div className={`main-chat ${isMobileChat ? "mobile-active" : ""}`} onTouchStart={onChatTouchStart} onTouchEnd={onChatTouchEnd}>
           <div className="chat-h">
-            <button className="icon-btn mobile-back" onClick={goBackMobile}>в†ђ</button>
-            <span className="chat-header-title">{activeChat ? activeChat.name : "Р’С‹Р±РµСЂРёС‚Рµ РґРёР°Р»РѕРі"}</span>
+            <button className="icon-btn mobile-back" onClick={goBackMobile}>←</button>
+            <span className="chat-header-title">{activeChat ? activeChat.name : "Выберите диалог"}</span>
             <button className="icon-btn" onClick={startVoiceCall} style={{ display: activeChat && !activeChat.is_group ? "block" : "none" }} title="Позвонить">
               <IconPhone />
             </button>
@@ -1872,9 +1872,9 @@ export default function App() {
             ))}
           </div>
           <div className="input-area">
-            {editingMessage?.id ? <div className="edit-hint">Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ СЃРѕРѕР±С‰РµРЅРёСЏ</div> : null}
+            {editingMessage?.id ? <div className="edit-hint">Редактирование сообщения</div> : null}
             <div className="input-wrapper">
-              <label className="icon-btn">рџ“Ћ<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
+              <label className="icon-btn">📎<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
               <textarea
                 ref={messageInputRef}
                 className="message-input"
@@ -1884,7 +1884,7 @@ export default function App() {
                 onInput={(e) => {
                   autosizeMessageInput(e.target);
                 }}
-                placeholder={pendingFile ? `Р¤Р°Р№Р»: ${pendingFile.name}` : ""}
+                placeholder={pendingFile ? `Файл: ${pendingFile.name}` : ""}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;
@@ -1896,9 +1896,9 @@ export default function App() {
                 }}
               />
               {editingMessage?.id ? (
-                <button className="icon-btn" title="РћС‚РјРµРЅРёС‚СЊ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>вњ•</button>
+                <button className="icon-btn" title="Отменить редактирование" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>✕</button>
               ) : null}
-              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "вњ“" : ">"}</button>
+              <button className={`send-btn ${editingMessage?.id ? "send-btn-edit" : ""}`} onClick={sendMessage}>{editingMessage?.id ? "✓" : ">"}</button>
             </div>
           </div>
         </div>
@@ -1912,11 +1912,11 @@ export default function App() {
             </div>
             <h3 className="center">{userInfo.name}</h3>
             <div className="info-box">
-              <div>РРјСЏ: {userInfo.name || "-"}</div>
-              <div>РўРµР»РµС„РѕРЅ: {userInfo.phone || "-"}</div>
-              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Р›РѕРіРёРЅ: {userInfo.login}</div>
+              <div>Имя: {userInfo.name || "-"}</div>
+              <div>Телефон: {userInfo.phone || "-"}</div>
+              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Логин: {userInfo.login}</div>
               <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Email: {userInfo.email || "-"}</div>
-              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>РРЅС„Рѕ: {userInfo.position || "-"}</div>
+              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Инфо: {userInfo.position || "-"}</div>
             </div>
             <button className="btn-gray details-toggle-btn" onClick={() => setShowUserInfoExtra((v) => !v)}>
               {showUserInfoExtra ? "Скрыть детали" : "Показать детали"}
@@ -1925,11 +1925,11 @@ export default function App() {
               className="note-area"
               value={userInfo.note || ""}
               onChange={(e) => setUserInfo((prev) => ({ ...prev, note: e.target.value }))}
-              placeholder="Р›РёС‡РЅР°СЏ Р·Р°РјРµС‚РєР° (РІРёРґРЅР° С‚РѕР»СЊРєРѕ РІР°Рј)"
+              placeholder="Личная заметка (видна только вам)"
             />
-            <button className="btn-gray" onClick={() => shareContactLink(userInfo.login)}>РџРѕРґРµР»РёС‚СЊСЃСЏ РєРѕРЅС‚Р°РєС‚РѕРј</button>
-            <button className="btn-blue" onClick={saveUserNote}>РЎРѕС…СЂР°РЅРёС‚СЊ Р·Р°РјРµС‚РєСѓ</button>
-            <div className="close-txt" onClick={() => setUserInfo(null)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <button className="btn-gray" onClick={() => shareContactLink(userInfo.login)}>Поделиться контактом</button>
+            <button className="btn-blue" onClick={saveUserNote}>Сохранить заметку</button>
+            <div className="close-txt" onClick={() => setUserInfo(null)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -1937,15 +1937,15 @@ export default function App() {
       {forwardOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>РџРµСЂРµСЃР»Р°С‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ</h3>
+            <h3>Переслать сообщение</h3>
             <div className="result-list">
               {allChatItems.map((chat) => (
                 <div key={`fw-${chat.kind}-${chat.id || chat.login}`} className="chat-item" onClick={() => forwardToChat(chat)}>
-                  <div className="chat-title">{chat.is_group ? "Р“СЂСѓРїРїР°: " : ""}{chat.name}</div>
+                  <div className="chat-title">{chat.is_group ? "Группа: " : ""}{chat.name}</div>
                 </div>
               ))}
             </div>
-            <div className="close-txt" onClick={() => { setForwardOpen(false); setForwardMessageId(null); }}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <div className="close-txt" onClick={() => { setForwardOpen(false); setForwardMessageId(null); }}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -1953,10 +1953,10 @@ export default function App() {
       {searchOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>РќРѕРІС‹Р№ С‡Р°С‚</h3>
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="РРјСЏ, С‚РµР»РµС„РѕРЅ РёР»Рё РїРѕС‡С‚Р°..." />
+            <h3>Новый чат</h3>
+            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Имя, телефон или почта..." />
             <div className="result-list">{usersFiltered.map((u) => <div key={u.id} className="chat-item" onClick={() => { openChat({ ...u, is_group: false, target: u.login, kind: "user" }); setSearchOpen(false); }}>{u.name}</div>)}</div>
-            <div className="close-txt" onClick={() => setSearchOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <div className="close-txt" onClick={() => setSearchOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -1964,13 +1964,13 @@ export default function App() {
       {groupCreateOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>РќРѕРІР°СЏ РіСЂСѓРїРїР°</h3>
-            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="РќР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹" />
-            <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="РџРѕРёСЃРє СѓС‡Р°СЃС‚РЅРёРєРѕРІ..." />
+            <h3>Новая группа</h3>
+            <input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Название группы" />
+            <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="Поиск участников..." />
             <div className="result-list compact">{groupUsers.map((u) => <div key={u.id} className="chat-item" onClick={() => pickMember(u)}>{u.name}</div>)}</div>
             <div className="chip-list">{selectedMembers.map((m) => <div className="chip" key={m.login}>{m.name}<span onClick={() => dropMember(m.login)}>x</span></div>)}</div>
-            <button className="btn-blue" onClick={submitGroup}>РЎРѕР·РґР°С‚СЊ РіСЂСѓРїРїСѓ</button>
-            <div className="close-txt" onClick={() => setGroupCreateOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <button className="btn-blue" onClick={submitGroup}>Создать группу</button>
+            <div className="close-txt" onClick={() => setGroupCreateOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -1984,15 +1984,15 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadGroupAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} placeholder="РќР°Р·РІР°РЅРёРµ" />
-            <input value={groupEditSearch} onChange={(e) => setGroupEditSearch(e.target.value)} placeholder="Р”РѕР±Р°РІРёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєР°..." />
+            <input value={editingGroupName} onChange={(e) => setEditingGroupName(e.target.value)} placeholder="Название" />
+            <input value={groupEditSearch} onChange={(e) => setGroupEditSearch(e.target.value)} placeholder="Добавить участника..." />
             <div className="result-list compact">{groupEditUsers.map((u) => <div key={u.id} className="chat-item" onClick={() => pickMember(u)}>{u.name}</div>)}</div>
             <div className="chip-list">{selectedMembers.map((m) => <div className="chip" key={m.login}>{m.name}<span onClick={() => dropMember(m.login)}>x</span></div>)}</div>
-            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Р›РѕРіРёРЅ РЅРѕРІРѕРіРѕ РІР»Р°РґРµР»СЊС†Р°" />
-            <button className="btn-blue" onClick={saveGroupSettings}>РЎРѕС…СЂР°РЅРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ</button>
-            <button className="btn-gray" onClick={transferGroupOwner}>РќР°Р·РЅР°С‡РёС‚СЊ РІР»Р°РґРµР»СЊС†Р°</button>
-            <button className="btn-red" onClick={deleteActiveGroup}>РЈРґР°Р»РёС‚СЊ РіСЂСѓРїРїСѓ</button>
-            <div className="close-txt" onClick={() => setGroupSettingsOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Логин нового владельца" />
+            <button className="btn-blue" onClick={saveGroupSettings}>Сохранить изменения</button>
+            <button className="btn-gray" onClick={transferGroupOwner}>Назначить владельца</button>
+            <button className="btn-red" onClick={deleteActiveGroup}>Удалить группу</button>
+            <div className="close-txt" onClick={() => setGroupSettingsOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -2010,24 +2010,24 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadMyAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р¤Р°РјРёР»РёСЏ" />
-            <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="РРјСЏ" />
-            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="РћС‚С‡РµСЃС‚РІРѕ" />
-            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="РўРµР»РµС„РѕРЅ" />
+            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
+            <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
+            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
+            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="РРЅС„Рѕ" />
+            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
             <button className="btn-gray details-toggle-btn" onClick={() => setShowProfileExtra((v) => !v)}>
               {showProfileExtra ? "Скрыть детали" : "Показать детали"}
             </button>
             <div className="profile-actions">
-              {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>РџРѕРґРµР»РёС‚СЊСЃСЏ РєРѕРЅС‚Р°РєС‚РѕРј</button> : null}
-              <button className="btn-gray" onClick={openBlockedList}>Р§РµСЂРЅС‹Р№ СЃРїРёСЃРѕРє</button>
-              <button className="btn-gray" onClick={() => setPassOpen(true)}>РЎРјРµРЅРёС‚СЊ РїР°СЂРѕР»СЊ</button>
-              {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>РђРґРјРёРЅ РЅР°СЃС‚СЂРѕР№РєРё</button> : null}
-              <button className="btn-blue" onClick={saveProfile}>РЎРѕС…СЂР°РЅРёС‚СЊ</button>
-              <button className="btn-red" onClick={doLogout}>Р’С‹С…РѕРґ</button>
+              {me?.login ? <button className="btn-gray" onClick={() => shareContactLink(me.login)}>Поделиться контактом</button> : null}
+              <button className="btn-gray" onClick={openBlockedList}>Черный список</button>
+              <button className="btn-gray" onClick={() => setPassOpen(true)}>Сменить пароль</button>
+              {me?.role?.toLowerCase() === "admin" ? <button className="btn-gray" onClick={openAdmin}>Админ настройки</button> : null}
+              <button className="btn-blue" onClick={saveProfile}>Сохранить</button>
+              <button className="btn-red" onClick={doLogout}>Выход</button>
             </div>
-            <div className="close-txt" onClick={() => setProfileOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <div className="close-txt" onClick={() => setProfileOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -2035,7 +2035,7 @@ export default function App() {
       {blockedOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>Р§РµСЂРЅС‹Р№ СЃРїРёСЃРѕРє</h3>
+            <h3>Черный список</h3>
             <div className="result-list compact">
               {blockedUsers.length ? blockedUsers.map((u) => (
                 <div key={u.login} className="chat-item">
@@ -2044,13 +2044,13 @@ export default function App() {
                     <div className="chat-subtitle">{u.login}</div>
                   </div>
                   <div className="blocked-actions">
-                    <button className="mini-btn" onClick={() => openUserDetails(u.login)}>РџСЂРѕС„РёР»СЊ</button>
-                    <button className="mini-btn" onClick={() => unblockLogin(u.login)}>Р Р°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ</button>
+                    <button className="mini-btn" onClick={() => openUserDetails(u.login)}>Профиль</button>
+                    <button className="mini-btn" onClick={() => unblockLogin(u.login)}>Разблокировать</button>
                   </div>
                 </div>
-              )) : <div className="muted">РЎРїРёСЃРѕРє РїСѓСЃС‚</div>}
+              )) : <div className="muted">Список пуст</div>}
             </div>
-            <div className="close-txt" onClick={() => setBlockedOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <div className="close-txt" onClick={() => setBlockedOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
@@ -2058,10 +2058,10 @@ export default function App() {
       {passOpen ? (
         <div className="modal" style={{ display: "flex", zIndex: 6000 }}>
           <div className="card">
-            <h3>РќРѕРІС‹Р№ РїР°СЂРѕР»СЊ</h3>
+            <h3>Новый пароль</h3>
             <input value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="1234" />
-            <button className="btn-blue" onClick={submitNewPass}>РџРѕРґС‚РІРµСЂРґРёС‚СЊ</button>
-            <div className="close-txt" onClick={() => setPassOpen(false)}>РѕС‚РјРµРЅР°</div>
+            <button className="btn-blue" onClick={submitNewPass}>Подтвердить</button>
+            <div className="close-txt" onClick={() => setPassOpen(false)}>отмена</div>
           </div>
         </div>
       ) : null}
@@ -2069,19 +2069,19 @@ export default function App() {
       {adminOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card admin-card">
-            <h3>РђРґРјРёРЅ РЅР°СЃС‚СЂРѕР№РєРё</h3>
-            <input value={adminQuery} onChange={(e) => setAdminQuery(e.target.value)} placeholder="РџРѕРёСЃРє РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ" />
+            <h3>Админ настройки</h3>
+            <input value={adminQuery} onChange={(e) => setAdminQuery(e.target.value)} placeholder="Поиск пользователя" />
             <div className="admin-create">
-              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Р›РѕРіРёРЅ" />
-              <input value={adminNew.password} onChange={(e) => setAdminNew((p) => ({ ...p, password: e.target.value }))} placeholder="РџР°СЂРѕР»СЊ" />
-              <input value={adminNew.first_name} onChange={(e) => setAdminNew((p) => ({ ...p, first_name: e.target.value }))} placeholder="РРјСЏ" />
-              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р¤Р°РјРёР»РёСЏ" />
+              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Логин" />
+              <input value={adminNew.password} onChange={(e) => setAdminNew((p) => ({ ...p, password: e.target.value }))} placeholder="Пароль" />
+              <input value={adminNew.first_name} onChange={(e) => setAdminNew((p) => ({ ...p, first_name: e.target.value }))} placeholder="Имя" />
+              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
               <select value={adminNew.role} onChange={(e) => setAdminNew((p) => ({ ...p, role: e.target.value }))}><option>User</option><option>Admin</option></select>
               <select value={adminNew.is_visible ? "1" : "0"} onChange={(e) => setAdminNew((p) => ({ ...p, is_visible: e.target.value === "1" }))}>
                 <option value="1">visible</option>
                 <option value="0">hidden</option>
               </select>
-              <button className="btn-blue" onClick={createAdminUser}>Р”РѕР±Р°РІРёС‚СЊ</button>
+              <button className="btn-blue" onClick={createAdminUser}>Добавить</button>
             </div>
             <div className="admin-list">
               {adminFiltered.map((u) => (
@@ -2094,13 +2094,13 @@ export default function App() {
                       <div className="muted mini">visible: {u.is_visible ? "yes" : "no"}</div>
                     </div>
                     <div className="admin-actions">
-                      <button className="mini-btn" onClick={() => startEditUser(u)}>Р РµРґ.</button>
-                      <button className="mini-btn" onClick={() => toggleBlock(u)}>{u.is_blocked ? "Р Р°Р·Р±Р»" : "Р‘Р»РѕРє"}</button>
+                      <button className="mini-btn" onClick={() => startEditUser(u)}>Ред.</button>
+                      <button className="mini-btn" onClick={() => toggleBlock(u)}>{u.is_blocked ? "Разбл" : "Блок"}</button>
                     </div>
                   </div>
                   {adminEdit?.source_id === u.id ? (
                     <div className="admin-create">
-                      <h4>Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ</h4>
+                      <h4>Редактирование пользователя</h4>
                       <input value={adminEdit.id} onChange={(e) => setAdminEdit((p) => ({ ...p, id: e.target.value }))} placeholder="id" />
                       <input value={adminEdit.login} onChange={(e) => setAdminEdit((p) => ({ ...p, login: e.target.value }))} placeholder="login" />
                       <input value={adminEdit.role} onChange={(e) => setAdminEdit((p) => ({ ...p, role: e.target.value }))} placeholder="role" />
@@ -2114,13 +2114,13 @@ export default function App() {
                       <input value={adminEdit.password} onChange={(e) => setAdminEdit((p) => ({ ...p, password: e.target.value }))} placeholder="new password" />
                       <select value={adminEdit.is_blocked ? "1" : "0"} onChange={(e) => setAdminEdit((p) => ({ ...p, is_blocked: e.target.value === "1" }))}><option value="0">active</option><option value="1">blocked</option></select>
                       <select value={adminEdit.is_visible ? "1" : "0"} onChange={(e) => setAdminEdit((p) => ({ ...p, is_visible: e.target.value === "1" }))}><option value="1">visible</option><option value="0">hidden</option></select>
-                      <button className="btn-blue" onClick={saveEditUser}>РЎРѕС…СЂР°РЅРёС‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ</button>
+                      <button className="btn-blue" onClick={saveEditUser}>Сохранить пользователя</button>
                     </div>
                   ) : null}
                 </div>
               ))}
             </div>
-            <div className="close-txt" onClick={() => setAdminOpen(false)}>Р·Р°РєСЂС‹С‚СЊ</div>
+            <div className="close-txt" onClick={() => setAdminOpen(false)}>закрыть</div>
           </div>
         </div>
       ) : null}
