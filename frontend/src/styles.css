@@ -34,15 +34,7 @@ body {
 }
 
 body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: env(safe-area-inset-top);
-  background: #1a2a6c;
-  z-index: 9999;
-  pointer-events: none;
+  display: none;
 }
 
 a {
@@ -59,7 +51,13 @@ a {
 
 .sidebar {
   width: 320px;
-  background: var(--glass);
+  background: linear-gradient(
+    180deg,
+    rgba(38, 52, 138, 0.96) 0%,
+    rgba(19, 30, 84, 0.95) 62%,
+    rgba(11, 20, 66, 0.95) 84%,
+    rgba(237, 132, 45, 0.92) 100%
+  );
   backdrop-filter: blur(20px);
   border-radius: 25px;
   display: flex;
@@ -86,8 +84,8 @@ a {
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: #1a2a6c;
-  backdrop-filter: none;
+  background: linear-gradient(180deg, #28388f 0%, #1f2f86 100%);
+  backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -946,9 +944,9 @@ a {
   .app-container {
     position: relative;
     width: 100%;
-    height: calc(100dvh - env(safe-area-inset-top));
+    height: 100dvh;
     margin: 0;
-    padding-top: env(safe-area-inset-top);
+    padding-top: 0;
     display: block;
   }
 
@@ -965,6 +963,11 @@ a {
     z-index: 2;
     transform: translateX(0);
     transition: transform 0.3s ease;
+  }
+
+  .side-head {
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: 14px;
   }
 
   .sidebar.mobile-hidden {
@@ -992,12 +995,14 @@ a {
     right: 0;
     z-index: 100;
     border-radius: 0;
-    background: #1a2a6c;
+    background: linear-gradient(180deg, #28388f 0%, #1f2f86 100%);
     backdrop-filter: none;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    min-height: calc(58px + env(safe-area-inset-top));
   }
 
   .main-chat.mobile-active .messages {
-    padding: 70px 12px 12px 12px;
+    padding: calc(82px + env(safe-area-inset-top)) 12px 12px 12px;
   }
 
   .extra-on-landscape,
