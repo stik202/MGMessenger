@@ -544,6 +544,37 @@ a {
   position: relative;
 }
 
+.input-wrapper .plus-wrap {
+  position: relative;
+}
+
+.input-wrapper .plus-menu {
+  position: absolute;
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 8px;
+  z-index: 5001;
+  border: 1px solid #444;
+  bottom: 44px;
+  left: 0;
+  width: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+.input-wrapper .plus-menu div {
+  padding: 12px;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: 0.2s;
+  color: #fff;
+  font-size: 14px;
+}
+
+.input-wrapper .plus-menu div:hover {
+  background: var(--ios-blue);
+}
+
 .input-wrapper input {
   flex: 1;
   background: none;
@@ -1057,13 +1088,14 @@ a {
     z-index: 120;
     border-radius: 0;
     background: #1a276e;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 8px 12px 0 12px;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .main-chat.mobile-active .input-wrapper {
     border-radius: 20px;
     padding: 4px 12px;
-    gap: 10px;
+    gap: 8px;
   }
 
   .main-chat.mobile-active .message-input {

@@ -225,6 +225,16 @@ function ChatMessage({
     setExpanded(true);
   };
 
+  let listData = null;
+  try {
+    const parsed = JSON.parse(messageText);
+    if (parsed && typeof parsed === "object" && parsed.type === "list") {
+      listData = parsed;
+    }
+  } catch {
+    // Not a JSON list message, continue as normal text
+  }
+
   return (
     <div
       className={`msg-row ${m.is_mine ? "mine" : "theirs"} ${m._localStatus === "failed" ? "failed" : ""}`}
@@ -248,8 +258,38 @@ function ChatMessage({
         <div className="msg-content">
           <div className="msg-sender">{m.sender}</div>
           {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
-          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Р¤Р°Р№Р»</a>) : null}
-          <div className="msg-text">{displayText}</div>
+          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
+          {listData ? (
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
+              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>📋 {listData.title}</div>
+              {listData.items && listData.items.length > 0 ? (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {listData.items.map((item, idx) => (
+                    <div key={item.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}>
+                      <input
+                        type="checkbox"
+                        checked={item.completed || false}
+                        disabled
+                        style={{ cursor: "not-allowed", width: "18px", height: "18px" }}
+                      />
+                      <span style={{ flex: 1, textDecoration: item.completed ? "line-through" : "none", opacity: item.completed ? 0.5 : 1 }}>
+                        {idx + 1}. {item.text}
+                      </span>
+                      {item.completedBy && (
+                        <span style={{ fontSize: "12px", opacity: 0.6, marginLeft: "auto" }}>✓ {item.completedBy}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {listData.editable && (
+                <div style={{ marginTop: "10px", fontSize: "12px", opacity: 0.7, fontStyle: "italic" }}>
+                  (Участники могут добавлять элементы)
+                </div>
+              )}
+            </div>
+          ) : null}
+          <div className="msg-text">{listData ? null : displayText}</div>
           {isLong && !expanded ? (
             <div className="msg-readmore" onClick={handleReadMore}>
               читать полностью
@@ -331,6 +371,11 @@ export default function App() {
   const [showUserInfoExtra, setShowUserInfoExtra] = useState(false);
   const [showProfileExtra, setShowProfileExtra] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [listCreateOpen, setListCreateOpen] = useState(false);
+  const [listTitle, setListTitle] = useState("");
+  const [listItems, setListItems] = useState([]);
+  const [listEditable, setListEditable] = useState(true);
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [chatPrefs, setChatPrefs] = useState(() => {
@@ -355,7 +400,7 @@ export default function App() {
 
   const [incomingCall, setIncomingCall] = useState(null);
   const [callOpen, setCallOpen] = useState(false);
-  const [callStatus, setCallStatus] = useState("РћР¶РёРґР°РЅРёРµ");
+  const [callStatus, setCallStatus] = useState("Ожидание");
   const [callDurationSec, setCallDurationSec] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [speakerEnabled, setSpeakerEnabled] = useState(false);
@@ -803,7 +848,7 @@ export default function App() {
       setLogin("");
       setPassword("");
     } catch (err) {
-      setError(err.message || "РћС€РёР±РєР° РІС…РѕРґР°");
+      setError(err.message || "Ошибка входа");
     }
   }
 
@@ -882,7 +927,7 @@ export default function App() {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("РћС€РёР±РєР° С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р°"));
+      reader.onerror = () => reject(new Error("Ошибка чтения файла"));
       reader.readAsDataURL(file);
     });
   }
@@ -928,7 +973,7 @@ export default function App() {
       return prepared;
     }
     if (file.size > MAX_FILE_BYTES) {
-      throw new Error("Р¤Р°Р№Р» Р±РѕР»СЊС€Рµ 2 РњР‘");
+      throw new Error("Файл больше 2 МБ");
     }
     return file;
   }
@@ -1031,7 +1076,7 @@ export default function App() {
   function scheduleCallWaitTimeout() {
     clearCallWaitTimer();
     callWaitTimerRef.current = setTimeout(() => {
-      setCallStatus("РќРµС‚ РѕС‚РІРµС‚Р°");
+      setCallStatus("Нет ответа");
       endCall(true);
     }, CALL_WAIT_TIMEOUT_MS);
   }
@@ -1055,7 +1100,7 @@ export default function App() {
 
   function connectCall(room, isInitiator) {
     setCallOpen(true);
-    setCallStatus(isInitiator ? "РћР¶РёРґР°РЅРёРµ РѕС‚РІРµС‚Р°..." : "РџРѕРґРєР»СЋС‡РµРЅРёРµ...");
+    setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
     setSpeakerEnabled(false);
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
@@ -1103,7 +1148,7 @@ export default function App() {
   async function startVoiceCall() {
     if (!activeChat || activeChat.is_group) return;
     if (isChatCallsDisabled(activeChat)) {
-      alert("Р—РІРѕРЅРєРё РґР»СЏ СЌС‚РѕРіРѕ С‡Р°С‚Р° РѕС‚РєР»СЋС‡РµРЅС‹");
+      alert("Звонки для этого чата отключены");
       return;
     }
     if (!window.isSecureContext) {
@@ -1120,7 +1165,7 @@ export default function App() {
     try {
       await apiCallInvite(token, activeChat.login);
     } catch (e) {
-      alert(e.message || "РћС€РёР±РєР° Р·РІРѕРЅРєР°");
+      alert(e.message || "Ошибка звонка");
       return;
     }
     connectCall(roomId(me.login, activeChat.login), true);
@@ -1187,7 +1232,7 @@ export default function App() {
     }
     pendingIceCandidatesRef.current = [];
     setCallOpen(false);
-    setCallStatus("РћР¶РёРґР°РЅРёРµ");
+    setCallStatus("Ожидание");
     setMicEnabled(true);
     setSpeakerEnabled(false);
   }
@@ -1443,7 +1488,7 @@ export default function App() {
   }
 
   async function deleteOwnMessage(message) {
-    if (!window.confirm("РЈРґР°Р»РёС‚СЊ СЌС‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ?")) return;
+    if (!window.confirm("Удалить это сообщение?")) return;
     await apiDeleteMessage(token, message.id);
     await loadMessages();
   }
@@ -1603,7 +1648,7 @@ export default function App() {
       setAdminNew({ login: "", password: "", first_name: "", last_name: "", role: "User", is_visible: true });
       setAdminUsers(await apiAdminUsers(token, ""));
     } catch (e) {
-      alert(e.message || "РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ");
+      alert(e.message || "Ошибка создания пользователя");
     }
   }
 
@@ -1722,7 +1767,7 @@ export default function App() {
       <div className="login-screen modal" style={{ display: "flex" }}>
         <form className="card" onSubmit={doLogin}>
           <h2 className="center">RayS Messenger</h2>
-          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Р›РѕРіРёРЅ" />
+          <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Логин" />
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Пароль" />
           <button className="btn-red" type="submit">Войти</button>
           {error ? <div className="error-text">{error}</div> : null}
@@ -1739,10 +1784,10 @@ export default function App() {
             <h3>Входящий звонок</h3>
             <div className="call-peer">{incomingCall.from_name || incomingCall.from_login}</div>
             <div className="call-actions incoming">
-              <button className="call-btn circle accept" onClick={acceptIncomingCall} title="РћС‚РІРµС‚РёС‚СЊ" aria-label="РћС‚РІРµС‚РёС‚СЊ">
+              <button className="call-btn circle accept" onClick={acceptIncomingCall} title="Ответить" aria-label="Ответить">
                 <IconPhone />
               </button>
-              <button className="call-btn circle hangup" onClick={declineIncomingCall} title="РћС‚РєР»РѕРЅРёС‚СЊ" aria-label="РћС‚РєР»РѕРЅРёС‚СЊ">
+              <button className="call-btn circle hangup" onClick={declineIncomingCall} title="Отклонить" aria-label="Отклонить">
                 <IconPhone />
               </button>
             </div>
@@ -1818,7 +1863,7 @@ export default function App() {
             ) : messageMenu.type === "chat" ? (
               <>
                 <button onClick={() => toggleChatMute(messageMenu.chat)}>
-                  {isChatMuted(messageMenu.chat) ? "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ" : "РћС‚РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"}
+                  {isChatMuted(messageMenu.chat) ? "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ" : "Отключить уведомления"}
                 </button>
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => toggleChatCalls(messageMenu.chat)}>
@@ -1828,7 +1873,7 @@ export default function App() {
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => { openUserDetails(messageMenu.chat.login); setMessageMenu(null); }}>Профиль</button>
                 ) : null}
-                <button onClick={() => deleteChatLocal(messageMenu.chat)}>РЈРґР°Р»РёС‚СЊ С‡Р°С‚</button>
+                <button onClick={() => deleteChatLocal(messageMenu.chat)}>Удалить чат</button>
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => blockChatUser(messageMenu.chat)}>Заблокировать пользователя</button>
                 ) : null}
@@ -1853,7 +1898,7 @@ export default function App() {
                     : notificationPermission !== "granted"
                       ? "Разрешить уведомления"
                       : notificationsEnabled
-                        ? "РћС‚РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"
+                        ? "Отключить уведомления"
                         : "Р’РєР»СЋС‡РёС‚СЊ СѓРІРµРґРѕРјР»РµРЅРёСЏ"
                 }
                 onClick={requestNotifications}
@@ -1872,7 +1917,7 @@ export default function App() {
                 </button>
               {plusOpen ? (
                 <div className="plus-menu">
-                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>РќРѕРІС‹Р№ С‡Р°С‚</div>
+                  <div onClick={() => { setPlusOpen(false); setSearchOpen(true); }}>Новый чат</div>
                   <div onClick={() => { setPlusOpen(false); setGroupCreateOpen(true); }}>Создать группу</div>
                 </div>
               ) : null}
@@ -1964,7 +2009,17 @@ export default function App() {
           <div className="input-area">
             {editingMessage?.id ? <div className="edit-hint">Editing message</div> : null}
             <div className="input-wrapper">
-              <label className="icon-btn">{"\u{1F4CE}"}<input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} /></label>
+              <div className="plus-wrap" style={{ position: "relative" }}>
+                <button className="icon-btn" onClick={() => setFileMenuOpen((v) => !v)} title="Добавить файл/опрос/список">+</button>
+                {fileMenuOpen ? (
+                  <div className="plus-menu" style={{ bottom: "44px", left: "-80px", width: "auto", padding: "8px 0" }}>
+                    <div onClick={() => { document.querySelector('[data-file-input]')?.click(); setFileMenuOpen(false); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Добавить файл</div>
+                    <div onClick={() => { setFileMenuOpen(false); /* TODO: Реализовать создание опроса */ alert("Функция 'Создать опрос' в разработке"); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Создать опрос</div>
+                    <div onClick={() => { setFileMenuOpen(false); setListCreateOpen(true); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Создать список</div>
+                  </div>
+                ) : null}
+                <input data-file-input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />
+              </div>
               <div className="emoji-wrap">
                 <button type="button" className="icon-btn emoji-btn" title="Emoji" aria-label="Emoji" onClick={() => setEmojiOpen((v) => !v)}>{"\u{1F60A}"}</button>
                 {emojiOpen ? (
@@ -2013,8 +2068,8 @@ export default function App() {
             <h3 className="center">{userInfo.name}</h3>
             <div className="info-box">
               <div>РРјСЏ: {userInfo.name || "-"}</div>
-              <div>РўРµР»РµС„РѕРЅ: {userInfo.phone || "-"}</div>
-              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Р›РѕРіРёРЅ: {userInfo.login}</div>
+              <div>Телефон: {userInfo.phone || "-"}</div>
+              <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Логин: {userInfo.login}</div>
               <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>Email: {userInfo.email || "-"}</div>
               <div className={`extra-on-landscape ${showUserInfoExtra ? "force-show" : ""}`}>РРЅС„Рѕ: {userInfo.position || "-"}</div>
             </div>
@@ -2025,7 +2080,7 @@ export default function App() {
               className="note-area"
               value={userInfo.note || ""}
               onChange={(e) => setUserInfo((prev) => ({ ...prev, note: e.target.value }))}
-              placeholder="Р›РёС‡РЅР°СЏ Р·Р°РјРµС‚РєР° (РІРёРґРЅР° С‚РѕР»СЊРєРѕ РІР°Рј)"
+              placeholder="Личная заметка (видна только вам)"
             />
             <button className="btn-gray" onClick={() => shareContactLink(userInfo.login)}>Поделиться контактом</button>
             <button className="btn-blue" onClick={saveUserNote}>Сохранить заметку</button>
@@ -2053,7 +2108,7 @@ export default function App() {
       {searchOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
-            <h3>РќРѕРІС‹Р№ С‡Р°С‚</h3>
+            <h3>Новый чат</h3>
             <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="РРјСЏ, С‚РµР»РµС„РѕРЅ РёР»Рё РїРѕС‡С‚Р°..." />
             <div className="result-list">{usersFiltered.map((u) => <div key={u.id} className="chat-item" onClick={() => { openChat({ ...u, is_group: false, target: u.login, kind: "user" }); setSearchOpen(false); }}>{u.name}</div>)}</div>
             <div className="close-txt" onClick={() => setSearchOpen(false)}>закрыть</div>
@@ -2088,7 +2143,7 @@ export default function App() {
             <input value={groupEditSearch} onChange={(e) => setGroupEditSearch(e.target.value)} placeholder="Р”РѕР±Р°РІРёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєР°..." />
             <div className="result-list compact">{groupEditUsers.map((u) => <div key={u.id} className="chat-item" onClick={() => pickMember(u)}>{u.name}</div>)}</div>
             <div className="chip-list">{selectedMembers.map((m) => <div className="chip" key={m.login}>{m.name}<span onClick={() => dropMember(m.login)}>x</span></div>)}</div>
-            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Р›РѕРіРёРЅ РЅРѕРІРѕРіРѕ РІР»Р°РґРµР»СЊС†Р°" />
+            <input value={groupNewOwner} onChange={(e) => setGroupNewOwner(e.target.value)} placeholder="Логин РЅРѕРІРѕРіРѕ РІР»Р°РґРµР»СЊС†Р°" />
             <button className="btn-blue" onClick={saveGroupSettings}>Сохранить изменения</button>
             <button className="btn-gray" onClick={transferGroupOwner}>РќР°Р·РЅР°С‡РёС‚СЊ РІР»Р°РґРµР»СЊС†Р°</button>
             <button className="btn-red" onClick={deleteActiveGroup}>Удалить группу</button>
@@ -2110,10 +2165,10 @@ export default function App() {
                 <input hidden type="file" accept="image/*" onChange={async (e) => { await uploadMyAvatar(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
             </div>
-            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р¤Р°РјРёР»РёСЏ" />
+            <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.last_name} onChange={(e) => setProfileForm((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
             <input value={profileForm.first_name} onChange={(e) => setProfileForm((p) => ({ ...p, first_name: e.target.value }))} placeholder="РРјСЏ" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.middle_name} onChange={(e) => setProfileForm((p) => ({ ...p, middle_name: e.target.value }))} placeholder="Отчество" />
-            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="РўРµР»РµС„РѕРЅ" />
+            <input value={profileForm.phone} onChange={(e) => setProfileForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Телефон" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="РРЅС„Рѕ" />
             <button className="btn-gray details-toggle-btn" onClick={() => setShowProfileExtra((v) => !v)}>
@@ -2161,7 +2216,7 @@ export default function App() {
             <h3>Новый пароль</h3>
             <input value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="1234" />
             <button className="btn-blue" onClick={submitNewPass}>Подтвердить</button>
-            <div className="close-txt" onClick={() => setPassOpen(false)}>РѕС‚РјРµРЅР°</div>
+            <div className="close-txt" onClick={() => setPassOpen(false)}>отмена</div>
           </div>
         </div>
       ) : null}
@@ -2172,10 +2227,10 @@ export default function App() {
             <h3>Админ настройки</h3>
             <input value={adminQuery} onChange={(e) => setAdminQuery(e.target.value)} placeholder="Поиск пользователя" />
             <div className="admin-create">
-              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Р›РѕРіРёРЅ" />
+              <input value={adminNew.login} onChange={(e) => setAdminNew((p) => ({ ...p, login: e.target.value }))} placeholder="Логин" />
               <input value={adminNew.password} onChange={(e) => setAdminNew((p) => ({ ...p, password: e.target.value }))} placeholder="Пароль" />
               <input value={adminNew.first_name} onChange={(e) => setAdminNew((p) => ({ ...p, first_name: e.target.value }))} placeholder="РРјСЏ" />
-              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Р¤Р°РјРёР»РёСЏ" />
+              <input value={adminNew.last_name} onChange={(e) => setAdminNew((p) => ({ ...p, last_name: e.target.value }))} placeholder="Фамилия" />
               <select value={adminNew.role} onChange={(e) => setAdminNew((p) => ({ ...p, role: e.target.value }))}><option>User</option><option>Admin</option></select>
               <select value={adminNew.is_visible ? "1" : "0"} onChange={(e) => setAdminNew((p) => ({ ...p, is_visible: e.target.value === "1" }))}>
                 <option value="1">visible</option>
@@ -2221,6 +2276,100 @@ export default function App() {
               ))}
             </div>
             <div className="close-txt" onClick={() => setAdminOpen(false)}>закрыть</div>
+          </div>
+        </div>
+      ) : null}
+      {listCreateOpen ? (
+        <div className="modal" style={{ display: "flex" }}>
+          <div className="card">
+            <h3>Создать список</h3>
+            <input
+              value={listTitle}
+              onChange={(e) => setListTitle(e.target.value)}
+              placeholder="Название списка (напр. Покупки, Задачи)"
+            />
+            <div style={{ marginTop: "15px", marginBottom: "15px" }}>
+              <label style={{ display: "flex", gap: "10px", alignItems: "center", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={listEditable}
+                  onChange={(e) => setListEditable(e.target.checked)}
+                  style={{ cursor: "pointer" }}
+                />
+                <span>Корректируемый список (участники могут добавлять элементы)</span>
+              </label>
+            </div>
+            <div style={{ marginBottom: "15px", fontSize: "14px", color: "#aaa" }}>
+              <div>Добавьте элементы (по одному на строку):</div>
+              <textarea
+                value={listItems.join("\n")}
+                onChange={(e) => setListItems(e.target.value.split("\n").filter(x => x.trim()))}
+                placeholder="Элемент 1&#10;Элемент 2&#10;Элемент 3"
+                style={{
+                  width: "100%",
+                  minHeight: "120px",
+                  marginTop: "10px",
+                  padding: "10px",
+                  borderRadius: "12px",
+                  border: "1px solid #555",
+                  backgroundColor: "var(--input-bg)",
+                  color: "#fff",
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  boxSizing: "border-box"
+                }}
+              />
+            </div>
+            <button
+              className="btn-blue"
+              onClick={async () => {
+                if (!listTitle.trim()) {
+                  alert("Введите название списка");
+                  return;
+                }
+                if (listItems.length === 0) {
+                  alert("Добавьте хотя бы один элемент");
+                  return;
+                }
+                // Создать сообщение со списком
+                const listMessage = {
+                  type: "list",
+                  title: listTitle,
+                  items: listItems.map((item, idx) => ({
+                    id: idx,
+                    text: item,
+                    completed: false,
+                    completedBy: null
+                  })),
+                  editable: listEditable,
+                  createdBy: me?.login
+                };
+                // Сохраняем в messageText и отправляем
+                setMessageText(JSON.stringify(listMessage));
+                setTimeout(() => {
+                  // После установки state, отправляем сообщение
+                  const chat = activeChat;
+                  if (!chat) return;
+                  const text = JSON.stringify(listMessage);
+                  const retryPayload = {
+                    chatType: chat.is_group ? "group" : "private",
+                    target: chat.target,
+                    text: text,
+                    file: null,
+                  };
+                  apiSendMessage(token, retryPayload).then(async () => {
+                    await Promise.all([loadMessages(chat), refreshChats()]);
+                  }).catch((e) => alert(e?.message || "Ошибка отправки"));
+                }, 0);
+                setListCreateOpen(false);
+                setListTitle("");
+                setListItems([]);
+                setListEditable(true);
+              }}
+            >
+              Создать список
+            </button>
+            <div className="close-txt" onClick={() => { setListCreateOpen(false); setListTitle(""); setListItems([]); }}>Отменить</div>
           </div>
         </div>
       ) : null}
