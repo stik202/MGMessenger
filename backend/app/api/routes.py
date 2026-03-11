@@ -316,6 +316,7 @@ async def get_blocked_users(
             unread_count=0,
             last_message="",
             last_time="",
+            is_online=realtime_hub.has_event_connection(u.login),
         )
         for u in rows
     ]
@@ -394,6 +395,7 @@ async def search_users(
                 phone=u.phone,
                 email=u.email,
                 position=u.position,
+                is_online=realtime_hub.has_event_connection(u.login),
             )
         )
     return result
@@ -424,6 +426,7 @@ async def get_user_info(
         email=user.email,
         position=user.position,
         note=note or "",
+        is_online=realtime_hub.has_event_connection(user.login),
     )
 
 
@@ -508,6 +511,7 @@ async def active_chats(
                 unread_count=private_unread.get(pid, 0),
                 last_message=_preview(last, current_user.id) if last else "",
                 last_time=last.created_at.strftime("%H:%M") if last and last.created_at else "",
+                is_online=realtime_hub.has_event_connection(u.login),
             )
         )
 
@@ -1261,11 +1265,13 @@ async def ws_events(websocket: WebSocket):
             return
 
     await realtime_hub.connect_events(login, websocket)
+    await realtime_hub.notify_users(list(realtime_hub.get_online_logins()), {"type": "presence:update"})
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         realtime_hub.disconnect_events(login, websocket)
+        await realtime_hub.notify_users(list(realtime_hub.get_online_logins()), {"type": "presence:update"})
 
 
 @router.websocket("/ws/calls/{room_id}")

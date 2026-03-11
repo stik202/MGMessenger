@@ -58,6 +58,7 @@ class UserShort(BaseModel):
     last_message: str = ""
     last_time: str = ""
     is_group: bool = False
+    is_online: bool = False
 
 
 class UserInfoOut(UserShort):

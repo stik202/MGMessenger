@@ -157,6 +157,25 @@ function IconSpeaker({ off = false }) {
   );
 }
 
+function IconBellOff() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4a5 5 0 0 0-5 5v2.7c0 .6-.2 1.1-.6 1.6L5 15h14l-1.4-1.7c-.4-.5-.6-1-.6-1.6V9a5 5 0 0 0-5-5Z" />
+      <path d="M10 18a2 2 0 0 0 4 0" />
+      <path d="M4 4l16 16" />
+    </svg>
+  );
+}
+
+function IconPhoneOff() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M20.5 15.8a16.6 16.6 0 0 1-4.2-.7 1.3 1.3 0 0 0-1.3.3l-2.1 2.1a15 15 0 0 1-6.4-6.4L8.6 9a1.3 1.3 0 0 0 .3-1.3 16.6 16.6 0 0 1-.7-4.2A1.5 1.5 0 0 0 6.7 2H3.8A1.8 1.8 0 0 0 2 3.8 18.2 18.2 0 0 0 20.2 22a1.8 1.8 0 0 0 1.8-1.8v-2.9a1.5 1.5 0 0 0-1.5-1.5Z" />
+      <path d="M4 4l16 16" />
+    </svg>
+  );
+}
+
 function ChatMessage({
   m,
   beginLongPress,
@@ -364,6 +383,7 @@ export default function App() {
   const [newPass, setNewPass] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [messageSearch, setMessageSearch] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [groupEditSearch, setGroupEditSearch] = useState("");
@@ -453,6 +473,16 @@ export default function App() {
     return users.filter((u) => `${u.name} ${u.login} ${u.phone || ""} ${u.email || ""}`.toLowerCase().includes(q));
   }, [users, searchQuery]);
 
+  const messagesFiltered = useMemo(() => {
+    const q = messageSearch.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => {
+      const listData = parseListMessage(m.text || "");
+      const text = listData ? `${listData.title || ""} ${(listData.items || []).map((i) => i.text).join(" ")}` : (m.text || "");
+      return text.toLowerCase().includes(q);
+    });
+  }, [messages, messageSearch]);
+
   const groupUsers = useMemo(() => {
     const q = groupSearch.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -498,9 +528,9 @@ export default function App() {
   function getChatStatus(item) {
     if (!item || item.is_group) return null;
     if (isChatMuted(item)) return "busy";
-    if (item.is_online === false) return "offline";
     if (item.is_online === true) return "online";
-    return "online";
+    if (item.is_online === false) return "offline";
+    return null;
   }
 
   const visibleChatItems = useMemo(
@@ -776,11 +806,18 @@ export default function App() {
     setChats(data);
   }
 
-  async function loadMessages(chat = activeChatRef.current) {
+  async function loadMessages(chat = activeChatRef.current, forceBottom = false) {
     if (!chat) return;
     clearUnreadForChat(chat);
     const rows = await apiGetMessages(token, chat.is_group ? "group" : "private", chat.target);
+    if (forceBottom) stickToBottomRef.current = true;
     applyMessagesWithSmartScroll(normalizeServerMessages(rows));
+    if (forceBottom) {
+      requestAnimationFrame(() => {
+        const node = msgListRef.current;
+        if (node) node.scrollTop = node.scrollHeight;
+      });
+    }
     await refreshChats();
     clearUnreadForChat(chat);
   }
@@ -789,7 +826,7 @@ export default function App() {
     reconnectRef.current.stopped = false;
     if (eventsWsRef.current) eventsWsRef.current.close();
     const ws = openEventsSocket(token, async (event) => {
-      if (event.type === "message:new" || event.type === "chat:update") {
+      if (event.type === "message:new" || event.type === "chat:update" || event.type === "presence:update") {
         await refreshChats();
         if (activeChatRef.current) {
           const rows = await apiGetMessages(
@@ -911,7 +948,7 @@ export default function App() {
     setActiveChat(chat);
     clearUnreadForChat(chat);
     if (window.innerWidth <= 768) setIsMobileChat(true);
-    loadMessages(chat).catch(() => {});
+    loadMessages(chat, true).catch(() => {});
   }
 
   function goBackMobile() {
@@ -2055,6 +2092,8 @@ export default function App() {
           <div className="chat-list">
             {visibleChatItems.map((u) => {
               const status = getChatStatus(u);
+              const muted = isChatMuted(u);
+              const callsDisabled = !u.is_group && isChatCallsDisabled(u);
               return (
                 <div className="chat-item" key={`${u.kind}-${u.id || u.login}`} onClick={() => openChat(u)}>
                   <div
@@ -2079,6 +2118,12 @@ export default function App() {
                     <div className="chat-title">{u.kind === "group" ? "Группа " : ""}{u.name}</div>
                     <div className="chat-subtitle">{u.last_message || "Нет сообщений"}</div>
                   </div>
+                  {(muted || callsDisabled) ? (
+                    <div className="chat-indicators">
+                      {muted ? <IconBellOff /> : null}
+                      {callsDisabled ? <IconPhoneOff /> : null}
+                    </div>
+                  ) : null}
                   <button
                     className="chat-more-btn"
                     onClick={(e) => {
@@ -2120,8 +2165,17 @@ export default function App() {
               <IconDotsVertical />
             </button>
           </div>
+          {activeChat ? (
+            <div className="chat-search">
+              <input
+                value={messageSearch}
+                onChange={(e) => setMessageSearch(e.target.value)}
+                placeholder="Поиск по сообщениям..."
+              />
+            </div>
+          ) : null}
           <div className="messages" ref={msgListRef} onScroll={handleMessagesScroll}>
-            {messages.map((m) => (
+            {messagesFiltered.map((m) => (
               <ChatMessage
                 key={m.id}
                 m={m}
@@ -2142,10 +2196,10 @@ export default function App() {
               <div className="plus-wrap" style={{ position: "relative" }}>
                 <button className="icon-btn" onClick={() => setFileMenuOpen((v) => !v)} title="Добавить файл/опрос/список">+</button>
                 {fileMenuOpen ? (
-                  <div className="plus-menu" style={{ bottom: "44px", left: "-80px", width: "auto", padding: "8px 0" }}>
-                    <div onClick={() => { document.querySelector('[data-file-input]')?.click(); setFileMenuOpen(false); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Добавить файл</div>
-                    <div onClick={() => { setFileMenuOpen(false); /* TODO: Реализовать создание опроса */ alert("Функция 'Создать опрос' в разработке"); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Создать опрос</div>
-                    <div onClick={() => { setFileMenuOpen(false); setListCreateOpen(true); }} style={{ padding: "12px 16px", cursor: "pointer" }}>Создать список</div>
+                  <div className="plus-actions">
+                    <button onClick={() => { document.querySelector('[data-file-input]')?.click(); setFileMenuOpen(false); }}>Загрузить файл</button>
+                    <button onClick={() => { setFileMenuOpen(false); alert("Функция 'Создать опрос' в разработке"); }}>Создать опрос</button>
+                    <button onClick={() => { setFileMenuOpen(false); setListCreateOpen(true); }}>Создать список</button>
                   </div>
                 ) : null}
                 <input data-file-input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />

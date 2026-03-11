@@ -18,6 +18,9 @@ class RealtimeHub:
         if not self._event_connections[login]:
             self._event_connections.pop(login, None)
 
+    def get_online_logins(self) -> set[str]:
+        return set(self._event_connections.keys())
+
     async def notify_users(self, logins: list[str], payload: dict) -> None:
         msg = json.dumps(payload)
         for login in logins:
