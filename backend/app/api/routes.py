@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
 from secrets import token_urlsafe
 from urllib.parse import quote_plus
@@ -59,6 +60,18 @@ def _preview(msg: Message, me_id: UUID) -> str:
     if msg.sender_id == me_id:
         return f"Вы: {base}" if base else "Вы: сообщение"
     return base or "Сообщение"
+
+
+def _parse_list_message(text: str | None) -> dict | None:
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except Exception:
+        return None
+    if isinstance(data, dict) and data.get("type") == "list":
+        return data
+    return None
 
 
 def _to_admin_user(u: User) -> AdminUserOut:
@@ -710,12 +723,32 @@ async def edit_message(
     msg = await db.scalar(select(Message).where(Message.id == message_id))
     if not msg:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
+    original_list = _parse_list_message(msg.text)
     if msg.sender_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Можно редактировать только свои сообщения")
+        if not original_list or not original_list.get("editable"):
+            raise HTTPException(status_code=403, detail="Можно редактировать только свои сообщения")
+        if msg.group_id:
+            member = await db.scalar(
+                select(GroupMember.id).where(
+                    GroupMember.group_id == msg.group_id,
+                    GroupMember.user_id == current_user.id,
+                )
+            )
+            if not member:
+                raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
+        else:
+            if msg.receiver_user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
 
     new_text = payload.text.strip()
     if not new_text and not msg.file_url:
         raise HTTPException(status_code=400, detail="Пустое сообщение")
+    if msg.sender_id != current_user.id:
+        updated_list = _parse_list_message(new_text)
+        if not updated_list:
+            raise HTTPException(status_code=400, detail="Можно редактировать только список")
+        if not updated_list.get("editable"):
+            raise HTTPException(status_code=400, detail="Список должен оставаться корректируемым")
     msg.text = new_text
     await db.commit()
 
@@ -1158,7 +1191,7 @@ async def invite_call(
         Message(
             sender_id=current_user.id,
             receiver_user_id=target.id,
-            text="📞 Попытка звонка",
+            text="рџ“ћ Попытка звонка",
             is_read=False,
         )
     )
@@ -1261,3 +1294,4 @@ async def ws_calls(websocket: WebSocket, room_id: str):
             await realtime_hub.broadcast_call(room_id, websocket, msg)
     except WebSocketDisconnect:
         realtime_hub.disconnect_call(room_id, websocket)
+
