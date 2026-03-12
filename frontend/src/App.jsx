@@ -42,6 +42,7 @@ const LS_CUSTOM_BG_KEY = "mgm_custom_bg";
 const CALL_WAIT_TIMEOUT_MS = 30000;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 1024;
+const MAX_POLL_OPTIONS = 8;
 
 const initialProfile = {
   last_name: "",
@@ -285,7 +286,7 @@ function ChatMessage({
           {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
           {listData ? (
             <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
-              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>рџ“‹ {listData.title}</div>
+              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>📋 {listData.title}</div>
               {listData.items && listData.items.length > 0 ? (
                 <div style={{ display: "grid", gap: "8px" }}>
                   {listData.items.map((item, idx) => (
@@ -400,7 +401,10 @@ export default function App() {
   const [showUserInfoExtra, setShowUserInfoExtra] = useState(false);
   const [showProfileExtra, setShowProfileExtra] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
   const [listCreateOpen, setListCreateOpen] = useState(false);
   const [listAddOpen, setListAddOpen] = useState(false);
   const [listAddText, setListAddText] = useState("");
@@ -451,6 +455,7 @@ export default function App() {
   const pollingRef = useRef(null);
   const longPressRef = useRef(null);
   const messageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const swipeStartRef = useRef({ x: 0, y: 0 });
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
@@ -1427,6 +1432,41 @@ export default function App() {
       autosizeMessageInput(input);
     }, 0);
     setEmojiOpen(false);
+    setAttachOpen(false);
+  }
+
+  function openFilePicker() {
+    fileInputRef.current?.click();
+    setAttachOpen(false);
+  }
+
+  function addPollOption() {
+    setPollOptions((opts) => (opts.length >= MAX_POLL_OPTIONS ? opts : [...opts, ""]));
+  }
+
+  function updatePollOption(idx, value) {
+    setPollOptions((opts) => opts.map((v, i) => (i === idx ? value : v)));
+  }
+
+  function submitPollDraft() {
+    const options = pollOptions.map((o) => o.trim()).filter(Boolean);
+    if (!pollQuestion.trim() || options.length < 2) {
+      alert("Введите вопрос и минимум два варианта");
+      return;
+    }
+    const pollPayload = {
+      type: "poll",
+      question: pollQuestion.trim(),
+      options: options.map((text, i) => ({ id: i + 1, text, votes: [], created_by: me?.login || "me" })),
+      created_at: Date.now(),
+    };
+    setMessageText(JSON.stringify(pollPayload));
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setPollOpen(false);
+    setAttachOpen(false);
+    setEmojiOpen(false);
+    setTimeout(() => messageInputRef.current?.focus(), 0);
   }
 
   async function openProfile() {
@@ -2193,16 +2233,16 @@ export default function App() {
           <div className="input-area">
             {editingMessage?.id ? <div className="edit-hint">Editing message</div> : null}
             <div className="input-wrapper">
-              <div className="plus-wrap" style={{ position: "relative" }}>
-                <button className="icon-btn" onClick={() => setFileMenuOpen((v) => !v)} title="Добавить файл/опрос/список">+</button>
-                {fileMenuOpen ? (
-                  <div className="plus-actions">
-                    <button onClick={() => { document.querySelector('[data-file-input]')?.click(); setFileMenuOpen(false); }}>Загрузить файл</button>
-                    <button onClick={() => { setFileMenuOpen(false); alert("Функция 'Создать опрос' в разработке"); }}>Создать опрос</button>
-                    <button onClick={() => { setFileMenuOpen(false); setListCreateOpen(true); }}>Создать список</button>
+              <input ref={fileInputRef} hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />
+              <div className="attach-wrap">
+                <button className="icon-btn attach-btn" onClick={() => setAttachOpen((v) => !v)} title="Добавить" aria-label="Добавить">+</button>
+                {attachOpen ? (
+                  <div className="attach-menu">
+                    <button onClick={openFilePicker}>Добавить файл</button>
+                    <button onClick={() => { setPollOpen(true); setAttachOpen(false); }}>Создать опрос</button>
+                    <button onClick={() => { setListCreateOpen(true); setAttachOpen(false); }}>Создать список</button>
                   </div>
                 ) : null}
-                <input data-file-input hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />
               </div>
               <div className="emoji-wrap">
                 <button type="button" className="icon-btn emoji-btn" title="Emoji" aria-label="Emoji" onClick={() => setEmojiOpen((v) => !v)}>{"\u{1F60A}"}</button>
