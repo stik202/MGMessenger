@@ -58,6 +58,13 @@ def _preview(msg: Message, me_id: UUID) -> str:
     base = msg.text.strip()
     if not base and msg.file_url:
         base = "Файл"
+    if base:
+        poll = _parse_poll_message(base)
+        if poll:
+            base = "Опрос"
+        lst = _parse_list_message(base)
+        if lst:
+            base = "Список"
     if msg.sender_id == me_id:
         return f"Вы: {base}" if base else "Вы: сообщение"
     return base or "Сообщение"

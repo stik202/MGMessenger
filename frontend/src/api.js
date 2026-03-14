@@ -331,9 +331,23 @@ export async function apiDeletePushSubscription(token, endpoint) {
   return response.json();
 }
 
+function resolveWsBase() {
+  try {
+    const base = API_BASE || window.location.origin;
+    const url = new URL(base, window.location.origin);
+    if (!url.host) return "";
+    const proto = url.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${url.host}`;
+  } catch {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    return window.location.host ? `${proto}://${window.location.host}` : "";
+  }
+}
+
 export function openEventsSocket(token, onMessage) {
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${window.location.host}/api/ws/events?token=${encodeURIComponent(token)}`);
+  const base = resolveWsBase();
+  if (!base) return null;
+  const ws = new WebSocket(`${base}/api/ws/events?token=${encodeURIComponent(token)}`);
   ws.onmessage = (event) => {
     try {
       onMessage(JSON.parse(event.data));
@@ -345,10 +359,9 @@ export function openEventsSocket(token, onMessage) {
 }
 
 export function openCallSocket(token, roomId, onMessage) {
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(
-    `${proto}://${window.location.host}/api/ws/calls/${encodeURIComponent(roomId)}?token=${encodeURIComponent(token)}`
-  );
+  const base = resolveWsBase();
+  if (!base) return null;
+  const ws = new WebSocket(`${base}/api/ws/calls/${encodeURIComponent(roomId)}?token=${encodeURIComponent(token)}`);
   ws.onmessage = (event) => {
     try {
       onMessage(JSON.parse(event.data));

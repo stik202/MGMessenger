@@ -207,7 +207,7 @@ function formatDuration(totalSec) {
 }
 
 function VoiceMessage({ url, durationSec, progress, isActive, isPlaying, onToggle }) {
-  const bars = new Array(12).fill(0);
+  const bars = new Array(18).fill(0);
   const safeProgress = Math.max(0, Math.min(1, progress || 0));
   return (
     <div className={`voice-msg ${isActive ? "active" : ""}`}>
@@ -556,6 +556,7 @@ export default function App() {
   const [messageMenu, setMessageMenu] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [copyToast, setCopyToast] = useState(false);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const [showUserInfoExtra, setShowUserInfoExtra] = useState(false);
   const [showProfileExtra, setShowProfileExtra] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -936,6 +937,12 @@ export default function App() {
       if (node) node.scrollTop = node.scrollHeight;
     });
   }, [messages.length]);
+  useEffect(() => {
+    const node = msgListRef.current;
+    if (!node) return;
+    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    setShowScrollDown(distanceFromBottom >= 120);
+  }, [messages.length, messageSearchOpen, audioPlayer.url]);
 
   useEffect(() => {
     const audioUrls = messages
@@ -1216,6 +1223,7 @@ export default function App() {
         }
       }
     });
+    if (!ws) return;
     ws.onopen = () => {
       reconnectRef.current.attempt = 0;
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
@@ -2185,6 +2193,7 @@ export default function App() {
     if (!node) return;
     const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
     stickToBottomRef.current = distanceFromBottom < 120;
+    setShowScrollDown(distanceFromBottom >= 120);
   }
 
   function isMobileInputMode() {
@@ -2750,6 +2759,20 @@ export default function App() {
                 }}
               />
             ))}
+            {messages.length ? (
+              <button
+                className={`scroll-down-btn ${showScrollDown ? "" : "hidden"}`}
+                onClick={() => {
+                  const node = msgListRef.current;
+                  if (node) node.scrollTop = node.scrollHeight;
+                  stickToBottomRef.current = true;
+                }}
+                title="К последнему сообщению"
+                aria-label="К последнему сообщению"
+              >
+                ↓
+              </button>
+            ) : null}
           </div>
           <div className="input-area">
             {editingMessage?.id ? <div className="edit-hint">Editing message</div> : null}

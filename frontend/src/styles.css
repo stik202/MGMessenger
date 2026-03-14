@@ -324,6 +324,9 @@ a {
   flex-direction: column;
   gap: 10px;
   background: transparent;
+  position: relative;
+  padding-top: calc(20px + var(--audio-offset) + var(--search-offset));
+  padding-bottom: 120px;
 }
 
 .msg-row {
@@ -1013,6 +1016,25 @@ a {
   font-size: 13px;
 }
 
+.scroll-down-btn {
+  position: sticky;
+  bottom: 16px;
+  margin-left: auto;
+  margin-right: 10px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(18, 28, 70, 0.65);
+  color: #fff;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.scroll-down-btn.hidden {
+  display: none;
+}
+
 .audio-player-title {
   flex: 1;
   opacity: 0.9;
@@ -1059,7 +1081,7 @@ a {
 .voice-wave {
   display: grid;
   grid-auto-flow: column;
-  gap: 3px;
+  gap: 2px;
   align-items: end;
   height: 24px;
   position: relative;
@@ -1078,11 +1100,24 @@ a {
 .voice-bar {
   width: 3px;
   height: 10px;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.65);
   border-radius: 999px;
   animation: voiceIdle 1.2s ease-in-out infinite;
   z-index: 1;
 }
+
+.voice-bar:nth-child(1) { animation-delay: 0ms; }
+.voice-bar:nth-child(2) { animation-delay: 80ms; }
+.voice-bar:nth-child(3) { animation-delay: 160ms; }
+.voice-bar:nth-child(4) { animation-delay: 240ms; }
+.voice-bar:nth-child(5) { animation-delay: 320ms; }
+.voice-bar:nth-child(6) { animation-delay: 400ms; }
+.voice-bar:nth-child(7) { animation-delay: 480ms; }
+.voice-bar:nth-child(8) { animation-delay: 560ms; }
+.voice-bar:nth-child(9) { animation-delay: 640ms; }
+.voice-bar:nth-child(10) { animation-delay: 720ms; }
+.voice-bar:nth-child(11) { animation-delay: 800ms; }
+.voice-bar:nth-child(12) { animation-delay: 880ms; }
 
 .voice-wave.playing .voice-bar {
   animation: voicePulse 0.8s ease-in-out infinite;
@@ -1105,12 +1140,12 @@ a {
 
 @keyframes voiceIdle {
   0%, 100% { height: 6px; }
-  50% { height: 12px; }
+  50% { height: 14px; }
 }
 
 @keyframes voicePulse {
   0%, 100% { height: 6px; }
-  50% { height: 22px; }
+  50% { height: 24px; }
 }
 
 .chat-search input {
@@ -1635,7 +1670,7 @@ a {
   }
 
   .main-chat.mobile-active .messages {
-    padding: calc(82px + env(safe-area-inset-top) + var(--audio-offset) + var(--search-offset)) 12px calc(110px + env(safe-area-inset-bottom)) 12px;
+    padding: calc(82px + env(safe-area-inset-top) + var(--audio-offset) + var(--search-offset)) 12px calc(140px + env(safe-area-inset-bottom)) 12px;
     background: transparent;
   }
 
