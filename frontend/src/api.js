@@ -18,6 +18,14 @@ async function readErrorDetail(response, fallback) {
   }
 }
 
+async function throwForResponse(response, fallback) {
+  if (response.ok) return;
+  const message = await readErrorDetail(response, fallback);
+  const err = new Error(message || fallback);
+  err.status = response.status;
+  throw err;
+}
+
 export function apiBase() {
   return API_BASE;
 }
@@ -34,7 +42,7 @@ export async function apiLogin(login, password) {
 
 export async function apiGetActiveChats(token) {
   const response = await fetch(`${API_BASE}/api/chats/active`, { headers: headers(token) });
-  if (!response.ok) throw new Error("Ошибка получения чатов");
+  await throwForResponse(response, "Ошибка получения чатов");
   return response.json();
 }
 
@@ -42,7 +50,7 @@ export async function apiSearchUsers(token, q) {
   const response = await fetch(`${API_BASE}/api/users/search?q=${encodeURIComponent(q)}`, {
     headers: headers(token),
   });
-  if (!response.ok) throw new Error("Ошибка поиска пользователей");
+  await throwForResponse(response, "Ошибка поиска пользователей");
   return response.json();
 }
 
@@ -51,7 +59,7 @@ export async function apiGetMessages(token, chatType, target) {
     `${API_BASE}/api/messages?chat_type=${encodeURIComponent(chatType)}&target=${encodeURIComponent(target)}`,
     { headers: headers(token) }
   );
-  if (!response.ok) throw new Error("Ошибка получения сообщений");
+  await throwForResponse(response, "Ошибка получения сообщений");
   return response.json();
 }
 
@@ -67,7 +75,7 @@ export async function apiSendMessage(token, payload) {
     headers: headers(token),
     body: form,
   });
-  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка отправки");
+  await throwForResponse(response, "Ошибка отправки");
   return response.json();
 }
 
@@ -77,13 +85,13 @@ export async function apiCreateGroup(token, name, members) {
     headers: { ...headers(token), "Content-Type": "application/json" },
     body: JSON.stringify({ name, members }),
   });
-  if (!response.ok) throw new Error((await response.json()).detail || "Ошибка создания группы");
+  await throwForResponse(response, "Ошибка создания группы");
   return response.json();
 }
 
 export async function apiGetMe(token) {
   const response = await fetch(`${API_BASE}/api/me`, { headers: headers(token) });
-  if (!response.ok) throw new Error("Ошибка профиля");
+  await throwForResponse(response, "Ошибка профиля");
   return response.json();
 }
 

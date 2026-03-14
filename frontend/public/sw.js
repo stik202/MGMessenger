@@ -52,8 +52,20 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || "/";
-  event.waitUntil(clients.openWindow(url));
+  const data = event.notification?.data || {};
+  const chatKey = resolvePushChatKey(data);
+  const url = chatKey ? `/?chat=${encodeURIComponent(chatKey)}` : (data.url || "/");
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
 });
 
 self.addEventListener("push", (event) => {

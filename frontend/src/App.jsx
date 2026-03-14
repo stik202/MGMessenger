@@ -150,6 +150,14 @@ function IconPhoneEnd() {
   );
 }
 
+function IconSend() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 11.5l18-8-6.8 17.8-3-7.2-8.2-2.6Z" />
+    </svg>
+  );
+}
+
 function IconDotsVertical() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -337,12 +345,12 @@ function ChatMessage({
             )
           ) : null}
           {listData ? (
-            <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
-              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Список: {listData.title}</div>
+            <div className="list-card">
+              <div className="list-card-title">Список: {listData.title}</div>
               {listData.items && listData.items.length > 0 ? (
-                <div style={{ display: "grid", gap: "8px" }}>
+                <div className="list-card-items">
                   {listData.items.map((item, idx) => (
-                    <div key={item.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}>
+                    <div key={item.id} className="list-card-item">
                       <input
                         type="checkbox"
                         checked={item.completed || false}
@@ -352,38 +360,38 @@ function ChatMessage({
                         }}
                         style={{ cursor: onToggleListItem ? "pointer" : "not-allowed", width: "18px", height: "18px" }}
                       />
-                      <span style={{ flex: 1, textDecoration: item.completed ? "line-through" : "none", opacity: item.completed ? 0.5 : 1 }}>
+                      <span className={`list-card-text ${item.completed ? "done" : ""}`}>
                         {idx + 1}. {item.text}
                       </span>
                       {item.completedBy && (
-                        <span style={{ fontSize: "12px", opacity: 0.6, marginLeft: "auto" }}>ok {item.completedBy}</span>
+                        <span className="list-card-meta">ok {item.completedBy}</span>
                       )}
                     </div>
                   ))}
                 </div>
               ) : null}
               {listData.editable && (
-                <div style={{ marginTop: "10px", fontSize: "12px", opacity: 0.7, fontStyle: "italic" }}>
+                <div className="list-card-hint">
                   (Участники могут добавлять элементы)
                 </div>
               )}
             </div>
           ) : null}
           {pollData ? (
-            <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
-              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Опрос: {pollData.question}</div>
-              <div style={{ display: "grid", gap: "6px" }}>
+            <div className="poll-card">
+              <div className="poll-card-title">Опрос: {pollData.question}</div>
+              <div className="poll-card-items">
                 {(pollData.options || []).map((opt, idx) => (
                   <div
                     key={opt.id || idx}
-                    style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)", cursor: "pointer" }}
+                    className="poll-card-item"
                     onClick={() => {
                       if (onTogglePollVote) onTogglePollVote(m, opt.id);
                     }}
                   >
-                    <span style={{ opacity: 0.8 }}>{idx + 1}.</span>
+                    <span className="poll-card-index">{idx + 1}.</span>
                     <span>{opt.text}</span>
-                    {Array.isArray(opt.votes) ? <span style={{ marginLeft: "auto", opacity: 0.7 }}>{opt.votes.length}</span> : null}
+                    {Array.isArray(opt.votes) ? <span className="poll-card-count">{opt.votes.length}</span> : null}
                   </div>
                 ))}
               </div>
@@ -432,6 +440,8 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
+  const [pendingAttachmentInfo, setPendingAttachmentInfo] = useState("");
+  const [pendingAttachmentKind, setPendingAttachmentKind] = useState("");
   const [activeChatOpenedAtMs, setActiveChatOpenedAtMs] = useState(0);
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -489,9 +499,12 @@ export default function App() {
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSec, setRecordingSec] = useState(0);
   const recordStreamRef = useRef(null);
   const recorderRef = useRef(null);
   const recordChunksRef = useRef([]);
+  const recordStartRef = useRef(0);
+  const recordTimerRef = useRef(null);
   const [chatPrefs, setChatPrefs] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(LS_CHAT_PREFS_KEY) || "{}");
@@ -797,6 +810,18 @@ export default function App() {
   }, [messageText, pendingFile]);
 
   useEffect(() => {
+    if (!pendingFile) {
+      setPendingAttachmentInfo("");
+      setPendingAttachmentKind("");
+      return;
+    }
+    if (pendingAttachmentKind) return;
+    const label = pendingFile.type.startsWith("image/") ? "Фото" : "Файл";
+    setPendingAttachmentInfo(`${label}: ${pendingFile.name}`);
+    setPendingAttachmentKind(pendingFile.type.startsWith("image/") ? "image" : "file");
+  }, [pendingFile, pendingAttachmentKind]);
+
+  useEffect(() => {
     if (!copyToast) return;
     const t = setTimeout(() => setCopyToast(false), 3000);
     return () => clearTimeout(t);
@@ -854,11 +879,30 @@ export default function App() {
         const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
         window.history.replaceState({}, "", nextUrl);
       }
+      const chatParam = params.get("chat");
+      if (chatParam) {
+        const [kind, id] = String(chatParam).split(":");
+        if (kind === "private") {
+          const targetUser = chatsData.users.find((u) => String(u.login) === String(id));
+          if (targetUser) openChat({ ...targetUser, kind: "user", is_group: false, target: targetUser.login });
+        }
+        if (kind === "group") {
+          const targetGroup = chatsData.groups.find((g) => String(g.id) === String(id));
+          if (targetGroup) openChat({ ...targetGroup, kind: "group", is_group: true, target: targetGroup.id });
+        }
+        params.delete("chat");
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      }
       if ("Notification" in window && Notification.permission === "granted") {
         ensurePushSubscription(token).catch(() => {});
       }
-    } catch {
-      doLogout();
+    } catch (err) {
+      if (err?.status === 401) {
+        doLogout();
+      } else {
+        setError("Проблема соединения. Повторите позже.");
+      }
     }
   }
 
@@ -1215,6 +1259,7 @@ export default function App() {
     if (!next) return;
     const text = JSON.stringify(next);
     setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, text } : m)));
+    if (!message.is_mine) return;
     try {
       await apiUpdateMessage(token, message.id, text);
       await loadMessages(activeChatRef.current);
@@ -1316,9 +1361,12 @@ export default function App() {
     setMessages((prev) => [...prev, optimistic]);
     setMessageText("");
     setPendingFile(null);
+    setPendingAttachmentInfo("");
+    setPendingAttachmentKind("");
     resetMessageInputHeight();
     setAttachOpen(false);
     setEmojiOpen(false);
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     try {
       await apiSendMessage(token, retryPayload);
     } catch (e) {
@@ -1715,6 +1763,9 @@ export default function App() {
     try {
       const prepared = await prepareFileForUpload(file);
       setPendingFile(prepared);
+      const label = prepared.type.startsWith("image/") ? "Фото" : "Файл";
+      setPendingAttachmentInfo(`${label}: ${prepared.name}`);
+      setPendingAttachmentKind(prepared.type.startsWith("image/") ? "image" : "file");
     } catch (e) {
       alert(e.message || "Не удалось подготовить файл");
     }
@@ -1962,47 +2013,11 @@ export default function App() {
     }
   }
 
-  async function sendFileMessage(file, text = "") {
-    const chat = activeChat;
-    if (!chat || !file) return;
-    const retryPayload = {
-      chatType: chat.is_group ? "group" : "private",
-      target: chat.target,
-      text,
-      file,
-    };
-    const optimistic = {
-      id: `tmp-${Date.now()}`,
-      sender: displayName(me),
-      sender_avatar_url: me?.avatar_url || "",
-      text,
-      file_url: "",
-      is_image: file.type.startsWith("image/"),
-      forwarded_from_login: "",
-      forwarded_from_name: "",
-      is_mine: true,
-      is_read: false,
-      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      _localStatus: "sending",
-      _retryPayload: retryPayload,
-    };
-    setMessages((prev) => [...prev, optimistic]);
-    try {
-      await apiSendMessage(token, retryPayload);
-    } catch (e) {
-      const errText = e?.message || "Not sent";
-      setMessages((prev) =>
-        prev.map((m) => (m.id === optimistic.id ? { ...m, _localStatus: "failed", _errorText: errText } : m))
-      );
-      return;
-    }
-    await Promise.all([loadMessages(chat), refreshChats()]);
-  }
-
   async function toggleVoiceRecording() {
     if (isRecording && recorderRef.current) {
       recorderRef.current.stop();
       setIsRecording(false);
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -2021,16 +2036,27 @@ export default function App() {
       recorder.onstop = async () => {
         const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
         recordChunksRef.current = [];
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
         if (recordStreamRef.current) {
           recordStreamRef.current.getTracks().forEach((t) => t.stop());
           recordStreamRef.current = null;
         }
         if (blob.size > 0) {
           const file = new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" });
-          await sendFileMessage(file, "");
+          setPendingFile(file);
+          const mm = String(Math.floor(recordingSec / 60)).padStart(2, "0");
+          const ss = String(recordingSec % 60).padStart(2, "0");
+          setPendingAttachmentInfo(`Голосовое сообщение: ${mm}:${ss}`);
+          setPendingAttachmentKind("voice");
         }
       };
       recorder.start();
+      recordStartRef.current = Date.now();
+      setRecordingSec(0);
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      recordTimerRef.current = setInterval(() => {
+        setRecordingSec(Math.floor((Date.now() - recordStartRef.current) / 1000));
+      }, 1000);
       setIsRecording(true);
     } catch (e) {
       alert(e?.message || "Не удалось начать запись");
@@ -2476,6 +2502,23 @@ export default function App() {
           </div>
           <div className="input-area">
             {editingMessage?.id ? <div className="edit-hint">Editing message</div> : null}
+            {isRecording ? (
+              <div className="record-indicator">
+                <span className="record-dot" />
+                <span>Запись голосового</span>
+                <span className="record-time">
+                  {`${String(Math.floor(recordingSec / 60)).padStart(2, "0")}:${String(recordingSec % 60).padStart(2, "0")}`}
+                </span>
+              </div>
+            ) : null}
+            {pendingFile ? (
+              <div className={`attachment-pill ${pendingAttachmentKind}`}>
+                <span>{pendingAttachmentInfo || "Вложение"}</span>
+                <button type="button" onClick={() => { setPendingFile(null); setPendingAttachmentInfo(""); setPendingAttachmentKind(""); }}>
+                  x
+                </button>
+              </div>
+            ) : null}
             <div className="input-wrapper">
               <input ref={fileInputRef} hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />
               <div className={`attach-wrap ${attachOpen ? "open" : ""}`}>
@@ -2523,14 +2566,6 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
-              <button
-                className={`icon-btn voice-btn ${isRecording ? "active" : ""}`}
-                onClick={toggleVoiceRecording}
-                title={isRecording ? "Остановить запись" : "Записать голосовое"}
-                aria-label={isRecording ? "Остановить запись" : "Записать голосовое"}
-              >
-                <IconMic off={!isRecording} />
-              </button>
               <textarea
                 ref={messageInputRef}
                 className="message-input"
@@ -2540,7 +2575,7 @@ export default function App() {
                 onInput={(e) => {
                   autosizeMessageInput(e.target);
                 }}
-                placeholder={pendingFile ? `File: ${pendingFile.name}` : ""}
+                placeholder="Сообщение..."
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;
@@ -2554,7 +2589,17 @@ export default function App() {
               {editingMessage?.id ? (
                 <button className="icon-btn" title="Cancel edit" onClick={() => { setEditingMessage(null); setMessageText(""); resetMessageInputHeight(); }}>x</button>
               ) : null}
-              <button className="send-btn" onClick={sendMessage}>{editingMessage?.id ? "v" : ">"}</button>
+              <button className="send-btn" onClick={sendMessage} title="Отправить" aria-label="Отправить">
+                <IconSend />
+              </button>
+              <button
+                className={`icon-btn voice-btn ${isRecording ? "active" : ""}`}
+                onClick={toggleVoiceRecording}
+                title={isRecording ? "Остановить запись" : "Записать голосовое"}
+                aria-label={isRecording ? "Остановить запись" : "Записать голосовое"}
+              >
+                <IconMic off={!isRecording} />
+              </button>
             </div>
           </div>
         </div>
