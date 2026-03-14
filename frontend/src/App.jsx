@@ -63,6 +63,11 @@ function initial(obj) {
   return (obj?.name || obj?.login || "?").charAt(0).toUpperCase();
 }
 
+function isAudioUrl(url) {
+  if (!url) return false;
+  return /\.(webm|ogg|mp3|wav|m4a)(\?.*)?$/i.test(String(url));
+}
+
 function roomId(a, b) {
   return [a, b].sort().join("__");
 }
@@ -224,6 +229,7 @@ function ChatMessage({
   currentChatKey,
   chatOpenedAtMs,
   onToggleListItem,
+  onTogglePollVote,
 }) {
   const messageText = m.text || "";
   const storageKey = `${currentChatKey}:${String(m.id)}`;
@@ -321,7 +327,15 @@ function ChatMessage({
         <div className="msg-content">
           <div className="msg-sender">{m.sender}</div>
           {m.forwarded_from_name ? <div className="msg-forwarded">Переслано: {m.forwarded_from_name}</div> : null}
-          {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
+          {m.file_url ? (
+            m.is_image ? (
+              <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} />
+            ) : isAudioUrl(m.file_url) ? (
+              <audio controls src={m.file_url} style={{ width: "100%" }} />
+            ) : (
+              <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>
+            )
+          ) : null}
           {listData ? (
             <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
               <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Список: {listData.title}</div>
@@ -360,9 +374,16 @@ function ChatMessage({
               <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Опрос: {pollData.question}</div>
               <div style={{ display: "grid", gap: "6px" }}>
                 {(pollData.options || []).map((opt, idx) => (
-                  <div key={opt.id || idx} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}>
+                  <div
+                    key={opt.id || idx}
+                    style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)", cursor: "pointer" }}
+                    onClick={() => {
+                      if (onTogglePollVote) onTogglePollVote(m, opt.id);
+                    }}
+                  >
                     <span style={{ opacity: 0.8 }}>{idx + 1}.</span>
                     <span>{opt.text}</span>
+                    {Array.isArray(opt.votes) ? <span style={{ marginLeft: "auto", opacity: 0.7 }}>{opt.votes.length}</span> : null}
                   </div>
                 ))}
               </div>
@@ -467,6 +488,10 @@ export default function App() {
   const [listEditable, setListEditable] = useState(true);
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const recordStreamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const recordChunksRef = useRef([]);
   const [chatPrefs, setChatPrefs] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(LS_CHAT_PREFS_KEY) || "{}");
@@ -588,10 +613,23 @@ export default function App() {
 
   function getChatStatus(item) {
     if (!item || item.is_group) return null;
+    if (!notificationsEnabled) return "busy";
     if (isChatMuted(item)) return "busy";
     if (item.is_online === true) return "online";
     if (item.is_online === false) return "offline";
     return null;
+  }
+
+  function getChatPreviewText(item) {
+    const text = item?.last_message || "";
+    const listData = parseListMessage(text);
+    if (listData) return "Список";
+    const pollData = parsePollMessage(text);
+    if (pollData) return "Опрос";
+    if (text.includes("\"type\":\"list\"") || text.includes("\"type\":\"poll\"")) {
+      return text.includes("\"type\":\"list\"") ? "Список" : "Опрос";
+    }
+    return text || "Нет сообщений";
   }
 
   const visibleChatItems = useMemo(
@@ -1166,6 +1204,37 @@ export default function App() {
       target.completed = nextCompleted;
       target.completedBy = nextCompleted ? (displayName(me) || me?.login || "Я") : null;
       return { ...list, items };
+    });
+  }
+
+  async function updatePollMessage(message, updater) {
+    if (!message?.id) return;
+    const pollData = parsePollMessage(message.text);
+    if (!pollData) return;
+    const next = updater(JSON.parse(JSON.stringify(pollData)));
+    if (!next) return;
+    const text = JSON.stringify(next);
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, text } : m)));
+    try {
+      await apiUpdateMessage(token, message.id, text);
+      await loadMessages(activeChatRef.current);
+    } catch (e) {
+      alert(e?.message || "Ошибка обновления опроса");
+      await loadMessages(activeChatRef.current);
+    }
+  }
+
+  function togglePollVote(message, optionId) {
+    if (!message) return;
+    const voter = me?.login || displayName(me) || "me";
+    updatePollMessage(message, (poll) => {
+      const options = Array.isArray(poll.options) ? poll.options : [];
+      const target = options.find((opt) => String(opt.id) === String(optionId));
+      if (!target) return poll;
+      const votes = Array.isArray(target.votes) ? target.votes : [];
+      const hasVote = votes.includes(voter);
+      target.votes = hasVote ? votes.filter((v) => v !== voter) : [...votes, voter];
+      return { ...poll, options };
     });
   }
 
@@ -1893,6 +1962,81 @@ export default function App() {
     }
   }
 
+  async function sendFileMessage(file, text = "") {
+    const chat = activeChat;
+    if (!chat || !file) return;
+    const retryPayload = {
+      chatType: chat.is_group ? "group" : "private",
+      target: chat.target,
+      text,
+      file,
+    };
+    const optimistic = {
+      id: `tmp-${Date.now()}`,
+      sender: displayName(me),
+      sender_avatar_url: me?.avatar_url || "",
+      text,
+      file_url: "",
+      is_image: file.type.startsWith("image/"),
+      forwarded_from_login: "",
+      forwarded_from_name: "",
+      is_mine: true,
+      is_read: false,
+      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      _localStatus: "sending",
+      _retryPayload: retryPayload,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    try {
+      await apiSendMessage(token, retryPayload);
+    } catch (e) {
+      const errText = e?.message || "Not sent";
+      setMessages((prev) =>
+        prev.map((m) => (m.id === optimistic.id ? { ...m, _localStatus: "failed", _errorText: errText } : m))
+      );
+      return;
+    }
+    await Promise.all([loadMessages(chat), refreshChats()]);
+  }
+
+  async function toggleVoiceRecording() {
+    if (isRecording && recorderRef.current) {
+      recorderRef.current.stop();
+      setIsRecording(false);
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Запись голоса не поддерживается");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordStreamRef.current = stream;
+      recordChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
+        recordChunksRef.current = [];
+        if (recordStreamRef.current) {
+          recordStreamRef.current.getTracks().forEach((t) => t.stop());
+          recordStreamRef.current = null;
+        }
+        if (blob.size > 0) {
+          const file = new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" });
+          await sendFileMessage(file, "");
+        }
+      };
+      recorder.start();
+      setIsRecording(true);
+    } catch (e) {
+      alert(e?.message || "Не удалось начать запись");
+    }
+  }
+
   function applyMessagesWithSmartScroll(rows) {
     const node = msgListRef.current;
     if (!node) {
@@ -2247,7 +2391,7 @@ export default function App() {
                   </div>
                   <div className="chat-title-wrap">
                     <div className="chat-title">{u.kind === "group" ? "Группа " : ""}{u.name}</div>
-                    <div className="chat-subtitle">{u.last_message || "Нет сообщений"}</div>
+                  <div className="chat-subtitle">{getChatPreviewText(u)}</div>
                   </div>
                   {(muted || callsDisabled) ? (
                     <div className="chat-indicators">
@@ -2326,6 +2470,7 @@ export default function App() {
                 currentChatKey={activeChatKey}
                 chatOpenedAtMs={activeChatOpenedAtMs}
                 onToggleListItem={toggleListItem}
+                onTogglePollVote={togglePollVote}
               />
             ))}
           </div>
@@ -2378,6 +2523,14 @@ export default function App() {
                   </div>
                 ) : null}
               </div>
+              <button
+                className={`icon-btn voice-btn ${isRecording ? "active" : ""}`}
+                onClick={toggleVoiceRecording}
+                title={isRecording ? "Остановить запись" : "Записать голосовое"}
+                aria-label={isRecording ? "Остановить запись" : "Записать голосовое"}
+              >
+                <IconMic off={!isRecording} />
+              </button>
               <textarea
                 ref={messageInputRef}
                 className="message-input"
@@ -2520,7 +2673,7 @@ export default function App() {
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
             <div className="profile-bg-actions">
-              <label className="btn-gray upload-btn">
+              <label className="btn-blue upload-btn">
                 Загрузить фон
                 <input hidden type="file" accept="image/*" onChange={(e) => { setCustomBackground(e.target.files?.[0]); e.target.value = ""; }} />
               </label>

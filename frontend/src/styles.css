@@ -59,13 +59,8 @@ a {
 
 .sidebar {
   width: 320px;
-  background: linear-gradient(
-    180deg,
-    rgba(40, 56, 143, 0.97) 0%,
-    rgba(30, 44, 122, 0.96) 58%,
-    rgba(20, 32, 95, 0.96) 100%
-  );
-  backdrop-filter: blur(20px);
+  background: rgba(15, 22, 60, 0.55);
+  backdrop-filter: blur(22px);
   border-radius: 25px;
   display: flex;
   flex-direction: column;
@@ -75,8 +70,8 @@ a {
 
 .main-chat {
   flex: 1;
-  background: rgba(9, 18, 58, 0.92);
-  backdrop-filter: blur(20px);
+  background: rgba(10, 16, 52, 0.55);
+  backdrop-filter: blur(22px);
   border-radius: 25px;
   display: flex;
   flex-direction: column;
@@ -91,8 +86,8 @@ a {
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, #28388f 0%, #1f2f86 100%);
-  backdrop-filter: blur(8px);
+  background: rgba(20, 30, 80, 0.55);
+  backdrop-filter: blur(18px);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -219,7 +214,9 @@ a {
   border-radius: 18px;
   margin: 4px 8px;
   transition: 0.2s;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px);
 }
 
 .sidebar .chat-item {
@@ -573,7 +570,7 @@ a {
 
 .input-area {
   padding: 12px 18px;
-  background: #1a2766;
+  background: rgba(18, 28, 70, 0.6);
   border-bottom-left-radius: 25px;
   border-bottom-right-radius: 25px;
 }
@@ -856,8 +853,8 @@ a {
   gap: 10px;
   min-height: 40px;
   flex-shrink: 0;
-  background: var(--glass);
-  backdrop-filter: blur(20px);
+  background: rgba(18, 28, 70, 0.55);
+  backdrop-filter: blur(18px);
 }
 
 .chat-header-title {
@@ -868,7 +865,7 @@ a {
 
 .chat-search {
   padding: 8px 20px 10px;
-  background: var(--glass);
+  background: rgba(18, 28, 70, 0.55);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
@@ -916,6 +913,19 @@ a {
   width: 22px;
   height: 22px;
   fill: currentColor;
+}
+
+.voice-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.voice-btn.active {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.7);
 }
 .mobile-back {
   display: none;
@@ -1296,6 +1306,13 @@ a {
     background-color: #1f2f86;
   }
 
+  body.has-custom-bg {
+    background-image: var(--custom-bg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
   .app-container {
     position: relative;
     width: 100%;
@@ -1303,7 +1320,7 @@ a {
     margin: 0;
     padding-top: 0;
     display: block;
-    background: #1f2f86;
+    background: transparent;
   }
 
   .sidebar,
@@ -1334,7 +1351,7 @@ a {
     z-index: 3;
     transform: translateX(100%);
     transition: transform 0.3s ease;
-    background: #061247;
+    background: rgba(8, 14, 46, 0.45);
   }
 
   .main-chat.mobile-active {
@@ -1352,15 +1369,15 @@ a {
     right: 0;
     z-index: 100;
     border-radius: 0;
-    background: linear-gradient(180deg, #28388f 0%, #1f2f86 100%);
-    backdrop-filter: none;
+    background: rgba(18, 28, 70, 0.65);
+    backdrop-filter: blur(18px);
     padding-top: calc(12px + env(safe-area-inset-top));
     min-height: calc(58px + env(safe-area-inset-top));
   }
 
   .main-chat.mobile-active .messages {
     padding: calc(82px + env(safe-area-inset-top)) 12px 72px 12px;
-    background: #061247;
+    background: transparent;
   }
 
   .main-chat.mobile-active .input-area {
@@ -1370,8 +1387,8 @@ a {
     bottom: 0;
     z-index: 120;
     border-radius: 0;
-    background: #1a276e;
-    padding: 8px 12px 6px 12px;
+    background: rgba(18, 28, 70, 0.7);
+    padding: 8px 12px calc(6px + env(safe-area-inset-bottom)) 12px;
   }
 
   .main-chat.mobile-active .input-wrapper {
