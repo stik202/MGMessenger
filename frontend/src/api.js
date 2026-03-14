@@ -63,6 +63,16 @@ export async function apiGetMessages(token, chatType, target) {
   return response.json();
 }
 
+export async function apiPollVote(token, messageId, optionId) {
+  const response = await fetch(`${API_BASE}/api/polls/vote`, {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ message_id: messageId, option_id: optionId }),
+  });
+  await throwForResponse(response, "Ошибка голосования");
+  return response.json();
+}
+
 export async function apiSendMessage(token, payload) {
   const form = new FormData();
   form.append("chat_type", payload.chatType);

@@ -15,6 +15,7 @@ import {
   apiGetBlockedUsers,
   apiGetMe,
   apiGetMessages,
+  apiPollVote,
   apiGetPushPublicKey,
   apiGetUserInfo,
   apiOpenInvite,
@@ -63,13 +64,41 @@ function initial(obj) {
   return (obj?.name || obj?.login || "?").charAt(0).toUpperCase();
 }
 
-function isAudioUrl(url) {
-  if (!url) return false;
-  const value = String(url);
-  if (/\.(webm|ogg|mp3|wav|m4a)(\?.*)?$/i.test(value)) return true;
-  if (value.includes("audio") || value.includes("voice")) return true;
-  return false;
-}
+  function isAudioUrl(url) {
+    if (!url) return false;
+    const value = String(url);
+    if (/\.(webm|ogg|mp3|wav|m4a)(\?.*)?$/i.test(value)) return true;
+    if (value.includes("audio") || value.includes("voice")) return true;
+    return false;
+  }
+
+  function toggleAudioPlayback(url, label = "Голосовое сообщение") {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const isSame = audioPlayer.url === url;
+    if (isSame && audioPlayer.isPlaying) {
+      audio.pause();
+      setAudioPlayer((p) => ({ ...p, isPlaying: false }));
+      return;
+    }
+    if (!isSame) {
+      audio.src = url;
+    }
+    audio.playbackRate = audioPlayer.rate || 1;
+    audio.play().then(() => {
+      setAudioPlayer({ url, label, rate: audio.playbackRate, isPlaying: true });
+    }).catch(() => {});
+  }
+
+  function cyclePlaybackRate() {
+    const speeds = [1, 1.25, 1.5, 1.75, 2];
+    const current = audioPlayer.rate || 1;
+    const idx = speeds.indexOf(current);
+    const next = speeds[(idx + 1) % speeds.length];
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = next;
+    setAudioPlayer((p) => ({ ...p, rate: next }));
+  }
 
 function roomId(a, b) {
   return [a, b].sort().join("__");
@@ -161,6 +190,23 @@ function IconSend() {
   );
 }
 
+function VoiceMessage({ url, label, isActive, isPlaying, onToggle }) {
+  const bars = new Array(12).fill(0);
+  return (
+    <div className={`voice-msg ${isActive ? "active" : ""}`}>
+      <button className="voice-play" onClick={onToggle} title="Прослушать" aria-label="Прослушать">
+        {isPlaying ? "⏸" : "▶"}
+      </button>
+      <div className={`voice-wave ${isPlaying ? "playing" : ""}`}>
+        {bars.map((_, i) => (
+          <span key={`bar-${i}`} className="voice-bar" />
+        ))}
+      </div>
+      <div className="voice-label">{label}</div>
+    </div>
+  );
+}
+
 function IconDotsVertical() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -241,6 +287,7 @@ function ChatMessage({
   chatOpenedAtMs,
   onToggleListItem,
   onTogglePollVote,
+  audioControls,
 }) {
   const messageText = m.text || "";
   const storageKey = `${currentChatKey}:${String(m.id)}`;
@@ -342,7 +389,13 @@ function ChatMessage({
             m.is_image ? (
               <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} />
             ) : isAudioUrl(m.file_url) ? (
-              <audio controls src={m.file_url} style={{ width: "100%" }} />
+              <VoiceMessage
+                url={m.file_url}
+                label="Голосовое сообщение"
+                isActive={audioControls ? audioControls.isActive(m.file_url) : false}
+                isPlaying={audioControls ? audioControls.isPlaying(m.file_url) : false}
+                onToggle={() => audioControls?.toggle(m.file_url)}
+              />
             ) : (
               <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>
             )
@@ -501,6 +554,7 @@ export default function App() {
   const [listEditable, setListEditable] = useState(true);
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [audioPlayer, setAudioPlayer] = useState({ url: "", label: "", rate: 1, isPlaying: false });
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSec, setRecordingSec] = useState(0);
   const recordStreamRef = useRef(null);
@@ -550,6 +604,7 @@ export default function App() {
   const longPressRef = useRef(null);
   const messageInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const audioRef = useRef(null);
   const swipeStartRef = useRef({ x: 0, y: 0 });
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
@@ -630,7 +685,7 @@ export default function App() {
   function getChatStatus(item) {
     if (!item || item.is_group) return null;
     if (item.is_online === true) {
-      return isChatMuted(item) || !notificationsEnabled ? "busy" : "online";
+      return !notificationsEnabled ? "busy" : "online";
     }
     if (item.is_online === false) return "offline";
     return null;
@@ -690,6 +745,18 @@ export default function App() {
       if (reconnectRef.current.timer) clearTimeout(reconnectRef.current.timer);
     };
   }, [token]);
+
+  useEffect(() => {
+    const audio = new Audio();
+    audio.preload = "metadata";
+    audio.onended = () => setAudioPlayer((p) => ({ ...p, isPlaying: false }));
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
+      audioRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -1328,14 +1395,6 @@ export default function App() {
     if (!next) return;
     const text = JSON.stringify(next);
     setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, text } : m)));
-    if (!message.is_mine) return;
-    try {
-      await apiUpdateMessage(token, message.id, text);
-      await loadMessages(activeChatRef.current);
-    } catch (e) {
-      alert(e?.message || "Ошибка обновления опроса");
-      await loadMessages(activeChatRef.current);
-    }
   }
 
   function togglePollVote(message, optionId) {
@@ -1350,6 +1409,14 @@ export default function App() {
       target.votes = hasVote ? votes.filter((v) => v !== voter) : [...votes, voter];
       return { ...poll, options };
     });
+    apiPollVote(token, message.id, optionId)
+      .then(async () => {
+        await loadMessages(activeChatRef.current);
+      })
+      .catch((e) => {
+        alert(e?.message || "Ошибка голосования");
+        loadMessages(activeChatRef.current).catch(() => {});
+      });
   }
 
   function openAddListItem(message) {
@@ -2535,6 +2602,19 @@ export default function App() {
               <IconDotsVertical />
             </button>
           </div>
+          {audioPlayer.url ? (
+            <div className="audio-player-bar">
+              <div className="audio-player-title">{audioPlayer.isPlaying ? "Воспроизведение" : "Пауза"}: {audioPlayer.label}</div>
+              <div className="audio-player-actions">
+                <button className="audio-speed-btn" onClick={cyclePlaybackRate} title="Скорость">
+                  {audioPlayer.rate}x
+                </button>
+                <a className="audio-download-btn" href={audioPlayer.url} download>
+                  Скачать
+                </a>
+              </div>
+            </div>
+          ) : null}
           {activeChat && messageSearchOpen ? (
             <div className="chat-search">
               <input
@@ -2566,6 +2646,11 @@ export default function App() {
                 chatOpenedAtMs={activeChatOpenedAtMs}
                 onToggleListItem={toggleListItem}
                 onTogglePollVote={togglePollVote}
+                audioControls={{
+                  toggle: (url) => toggleAudioPlayback(url),
+                  isActive: (url) => audioPlayer.url === url,
+                  isPlaying: (url) => audioPlayer.url === url && audioPlayer.isPlaying,
+                }}
               />
             ))}
           </div>

@@ -88,8 +88,8 @@ a {
 
 .main-chat {
   flex: 1;
-  background: rgba(10, 16, 52, 0.55);
-  backdrop-filter: blur(22px);
+  background: transparent;
+  backdrop-filter: none;
   border-radius: 25px;
   display: flex;
   flex-direction: column;
@@ -323,6 +323,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: transparent;
 }
 
 .msg-row {
@@ -1000,6 +1001,104 @@ a {
   gap: 8px;
 }
 
+.audio-player-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(18, 28, 70, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  font-size: 13px;
+}
+
+.audio-player-title {
+  flex: 1;
+  opacity: 0.9;
+}
+
+.audio-player-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.audio-speed-btn,
+.audio-download-btn {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.voice-msg {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.voice-play {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
+}
+
+.voice-wave {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 3px;
+  align-items: end;
+  height: 24px;
+}
+
+.voice-bar {
+  width: 3px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  animation: voiceIdle 1.2s ease-in-out infinite;
+}
+
+.voice-wave.playing .voice-bar {
+  animation: voicePulse 0.8s ease-in-out infinite;
+}
+
+.voice-bar:nth-child(odd) {
+  animation-delay: 0.1s;
+}
+
+.voice-bar:nth-child(3n) {
+  animation-delay: 0.2s;
+}
+
+.voice-label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+@keyframes voiceIdle {
+  0%, 100% { height: 6px; }
+  50% { height: 12px; }
+}
+
+@keyframes voicePulse {
+  0%, 100% { height: 6px; }
+  50% { height: 22px; }
+}
+
 .chat-search input {
   flex: 1;
   padding: 8px 12px;
@@ -1497,7 +1596,7 @@ a {
     z-index: 3;
     transform: translateX(100%);
     transition: transform 0.3s ease;
-    background: rgba(8, 14, 46, 0.45);
+    background: transparent;
   }
 
   .main-chat.mobile-active {
