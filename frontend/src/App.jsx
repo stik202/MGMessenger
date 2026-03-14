@@ -40,6 +40,7 @@ const LS_KEY = "mgm_auth";
 const LS_CHAT_PREFS_KEY = "mgm_chat_prefs";
 const LS_NOTIFICATIONS_ENABLED_KEY = "mgm_notifications_enabled";
 const LS_CUSTOM_BG_KEY = "mgm_custom_bg";
+const LS_MIC_PERMISSION = "mgm_mic_permission";
 const CALL_WAIT_TIMEOUT_MS = 30000;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 1024;
@@ -72,7 +73,7 @@ function initial(obj) {
     return false;
   }
 
-  function toggleAudioPlayback(url, label = "Голосовое сообщение") {
+  function toggleAudioPlayback(url, label = "") {
     const audio = audioRef.current;
     if (!audio) return;
     const isSame = audioPlayer.url === url;
@@ -86,7 +87,14 @@ function initial(obj) {
     }
     audio.playbackRate = audioPlayer.rate || 1;
     audio.play().then(() => {
-      setAudioPlayer({ url, label, rate: audio.playbackRate, isPlaying: true });
+      setAudioPlayer((p) => ({
+        ...p,
+        url,
+        label,
+        rate: audio.playbackRate,
+        isPlaying: true,
+        duration: audio.duration || p.duration || 0,
+      }));
     }).catch(() => {});
   }
 
@@ -190,19 +198,29 @@ function IconSend() {
   );
 }
 
-function VoiceMessage({ url, label, isActive, isPlaying, onToggle }) {
+function formatDuration(totalSec) {
+  if (!Number.isFinite(totalSec)) return "00:00";
+  const s = Math.max(0, Math.floor(totalSec));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function VoiceMessage({ url, durationSec, progress, isActive, isPlaying, onToggle }) {
   const bars = new Array(12).fill(0);
+  const safeProgress = Math.max(0, Math.min(1, progress || 0));
   return (
     <div className={`voice-msg ${isActive ? "active" : ""}`}>
       <button className="voice-play" onClick={onToggle} title="Прослушать" aria-label="Прослушать">
-        {isPlaying ? "⏸" : "▶"}
+        {isPlaying ? "||" : ">"}
       </button>
       <div className={`voice-wave ${isPlaying ? "playing" : ""}`}>
+        <div className="voice-progress" style={{ width: `${safeProgress * 100}%` }} />
         {bars.map((_, i) => (
           <span key={`bar-${i}`} className="voice-bar" />
         ))}
       </div>
-      <div className="voice-label">{label}</div>
+      <div className="voice-time">{formatDuration(durationSec)}</div>
     </div>
   );
 }
@@ -391,7 +409,8 @@ function ChatMessage({
             ) : isAudioUrl(m.file_url) ? (
               <VoiceMessage
                 url={m.file_url}
-                label="Голосовое сообщение"
+                durationSec={audioControls ? audioControls.duration(m.file_url) : 0}
+                progress={audioControls ? audioControls.progress(m.file_url) : 0}
                 isActive={audioControls ? audioControls.isActive(m.file_url) : false}
                 isPlaying={audioControls ? audioControls.isPlaying(m.file_url) : false}
                 onToggle={() => audioControls?.toggle(m.file_url)}
@@ -554,7 +573,15 @@ export default function App() {
   const [listEditable, setListEditable] = useState(true);
   const [blockedOpen, setBlockedOpen] = useState(false);
   const [blockedUsers, setBlockedUsers] = useState([]);
-  const [audioPlayer, setAudioPlayer] = useState({ url: "", label: "", rate: 1, isPlaying: false });
+  const [audioPlayer, setAudioPlayer] = useState({
+    url: "",
+    label: "",
+    rate: 1,
+    isPlaying: false,
+    duration: 0,
+    currentTime: 0,
+  });
+  const [voiceDurations, setVoiceDurations] = useState({});
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSec, setRecordingSec] = useState(0);
   const recordStreamRef = useRef(null);
@@ -685,7 +712,7 @@ export default function App() {
   function getChatStatus(item) {
     if (!item || item.is_group) return null;
     if (item.is_online === true) {
-      return !notificationsEnabled ? "busy" : "online";
+      return item.is_notifications_muted ? "busy" : "online";
     }
     if (item.is_online === false) return "offline";
     return null;
@@ -749,7 +776,9 @@ export default function App() {
   useEffect(() => {
     const audio = new Audio();
     audio.preload = "metadata";
-    audio.onended = () => setAudioPlayer((p) => ({ ...p, isPlaying: false }));
+    audio.onended = () => setAudioPlayer((p) => ({ ...p, isPlaying: false, currentTime: p.duration || 0 }));
+    audio.ontimeupdate = () => setAudioPlayer((p) => ({ ...p, currentTime: audio.currentTime || 0 }));
+    audio.onloadedmetadata = () => setAudioPlayer((p) => ({ ...p, duration: audio.duration || 0 }));
     audioRef.current = audio;
     return () => {
       audio.pause();
@@ -779,6 +808,11 @@ export default function App() {
   useEffect(() => {
     notificationsEnabledRef.current = notificationsEnabled;
   }, [notificationsEnabled]);
+
+  useEffect(() => {
+    if (!token || !me?.login) return;
+    apiUpdateMe(token, { is_notifications_muted: !notificationsEnabled }).catch(() => {});
+  }, [token, me?.login, notificationsEnabled]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -902,6 +936,31 @@ export default function App() {
       if (node) node.scrollTop = node.scrollHeight;
     });
   }, [messages.length]);
+
+  useEffect(() => {
+    const audioUrls = messages
+      .map((m) => m.file_url)
+      .filter((url) => url && isAudioUrl(url));
+    const missing = audioUrls.filter((url) => !voiceDurations[url]);
+    if (!missing.length) return;
+    let cancelled = false;
+    missing.forEach((url) => {
+      const audio = new Audio();
+      audio.preload = "metadata";
+      audio.src = url;
+      audio.onloadedmetadata = () => {
+        if (cancelled) return;
+        setVoiceDurations((prev) => ({ ...prev, [url]: audio.duration || 0 }));
+      };
+      audio.onerror = () => {
+        if (cancelled) return;
+        setVoiceDurations((prev) => ({ ...prev, [url]: prev[url] || 0 }));
+      };
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, voiceDurations]);
 
   useEffect(() => {
     if (!pendingFile) {
@@ -2156,12 +2215,30 @@ export default function App() {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       return;
     }
+    const storedPerm = localStorage.getItem(LS_MIC_PERMISSION);
+    if (storedPerm === "denied") {
+      alert("Доступ к микрофону запрещен в настройках браузера");
+      return;
+    }
+    if (navigator.permissions?.query) {
+      try {
+        const status = await navigator.permissions.query({ name: "microphone" });
+        if (status.state === "denied") {
+          localStorage.setItem(LS_MIC_PERMISSION, "denied");
+          alert("Доступ к микрофону запрещен в настройках браузера");
+          return;
+        }
+      } catch {
+        // ignore permission query errors
+      }
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       alert("Запись голоса не поддерживается");
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStorage.setItem(LS_MIC_PERMISSION, "granted");
       recordStreamRef.current = stream;
       recordChunksRef.current = [];
       const recorder = new MediaRecorder(stream);
@@ -2299,6 +2376,7 @@ export default function App() {
       const next = !notificationsEnabled;
       setNotificationsEnabled(next);
       localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, next ? "1" : "0");
+      apiUpdateMe(token, { is_notifications_muted: !next }).catch(() => {});
       try {
         // Keep push subscription active; the bell only controls in-app notification behavior.
         await ensurePushSubscription(token);
@@ -2312,6 +2390,7 @@ export default function App() {
     if (result === "granted") {
       setNotificationsEnabled(true);
       localStorage.setItem(LS_NOTIFICATIONS_ENABLED_KEY, "1");
+      apiUpdateMe(token, { is_notifications_muted: false }).catch(() => {});
       try {
         await ensurePushSubscription(token);
       } catch (e) {
@@ -2579,7 +2658,15 @@ export default function App() {
           </div>
         </div>
 
-        <div className={`main-chat ${isMobileChat ? "mobile-active" : ""}`} onTouchStart={onChatTouchStart} onTouchEnd={onChatTouchEnd}>
+        <div
+          className={`main-chat ${isMobileChat ? "mobile-active" : ""} ${messageSearchOpen ? "search-open" : ""} ${audioPlayer.url ? "audio-open" : ""}`}
+          style={{
+            "--audio-offset": audioPlayer.url ? "44px" : "0px",
+            "--search-offset": messageSearchOpen ? "44px" : "0px",
+          }}
+          onTouchStart={onChatTouchStart}
+          onTouchEnd={onChatTouchEnd}
+        >
           <div className="chat-h">
             <button className="icon-btn mobile-back" onClick={goBackMobile}>←</button>
             <span className="chat-header-title">{activeChat ? activeChat.name : "Выберите диалог"}</span>
@@ -2604,7 +2691,11 @@ export default function App() {
           </div>
           {audioPlayer.url ? (
             <div className="audio-player-bar">
-              <div className="audio-player-title">{audioPlayer.isPlaying ? "Воспроизведение" : "Пауза"}: {audioPlayer.label}</div>
+              <div className="audio-player-title">
+                {audioPlayer.isPlaying ? "Воспроизведение" : "Пауза"}{" "}
+                {audioPlayer.duration ? formatDuration(audioPlayer.currentTime) : ""}{" "}
+                {audioPlayer.duration ? `/ ${formatDuration(audioPlayer.duration)}` : ""}
+              </div>
               <div className="audio-player-actions">
                 <button className="audio-speed-btn" onClick={cyclePlaybackRate} title="Скорость">
                   {audioPlayer.rate}x
@@ -2650,6 +2741,12 @@ export default function App() {
                   toggle: (url) => toggleAudioPlayback(url),
                   isActive: (url) => audioPlayer.url === url,
                   isPlaying: (url) => audioPlayer.url === url && audioPlayer.isPlaying,
+                  duration: (url) =>
+                    audioPlayer.url === url ? audioPlayer.duration : (voiceDurations[url] || 0),
+                  progress: (url) =>
+                    audioPlayer.url === url && audioPlayer.duration
+                      ? audioPlayer.currentTime / audioPlayer.duration
+                      : 0,
                 }}
               />
             ))}

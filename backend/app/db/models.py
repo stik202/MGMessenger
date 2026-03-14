@@ -25,6 +25,7 @@ class User(Base):
     middle_name: Mapped[str] = mapped_column(String(120), default="")
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     is_visible: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_notifications_muted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

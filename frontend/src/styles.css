@@ -1,5 +1,5 @@
 :root {
-  --bg: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+  --bg: linear-gradient(135deg, #f7f1dd, #fff3df, #e8f2ff);
   --glass: rgba(0, 0, 0, 0.7);
   --ios-blue: #007aff;
   --card-bg: #2c2c2e;
@@ -14,11 +14,11 @@
 html,
 body,
 #root {
-  background-color: #1a2a6c;
+  background-color: #f7f1dd;
 }
 
 html {
-  background: #1a2a6c;
+  background: #f7f1dd;
 }
 
 body {
@@ -26,7 +26,7 @@ body {
   height: 100vh;
   font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
-  background-color: #1a2a6c;
+  background-color: #f7f1dd;
   background-image: none;
   background-size: cover;
   background-position: center;
@@ -1062,6 +1062,17 @@ a {
   gap: 3px;
   align-items: end;
   height: 24px;
+  position: relative;
+}
+
+.voice-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(90, 140, 255, 0.35);
+  border-radius: 999px;
+  z-index: 0;
 }
 
 .voice-bar {
@@ -1070,6 +1081,7 @@ a {
   background: rgba(255, 255, 255, 0.5);
   border-radius: 999px;
   animation: voiceIdle 1.2s ease-in-out infinite;
+  z-index: 1;
 }
 
 .voice-wave.playing .voice-bar {
@@ -1084,9 +1096,11 @@ a {
   animation-delay: 0.2s;
 }
 
-.voice-label {
+.voice-time {
   font-size: 12px;
   opacity: 0.7;
+  min-width: 44px;
+  text-align: right;
 }
 
 @keyframes voiceIdle {
@@ -1547,8 +1561,8 @@ a {
   body {
     height: 100dvh;
     overflow: hidden;
-    background: #1f2f86;
-    background-color: #1f2f86;
+    background: #f7f1dd;
+    background-color: #f7f1dd;
   }
 
   body.has-custom-bg {
@@ -1621,7 +1635,7 @@ a {
   }
 
   .main-chat.mobile-active .messages {
-    padding: calc(82px + env(safe-area-inset-top)) 12px 72px 12px;
+    padding: calc(82px + env(safe-area-inset-top) + var(--audio-offset) + var(--search-offset)) 12px calc(110px + env(safe-area-inset-bottom)) 12px;
     background: transparent;
   }
 
@@ -1634,6 +1648,22 @@ a {
     border-radius: 0;
     background: rgba(18, 28, 70, 0.7);
     padding: 8px 12px env(safe-area-inset-bottom) 12px;
+  }
+
+  .main-chat.mobile-active .audio-player-bar {
+    position: fixed;
+    top: calc(58px + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    z-index: 110;
+  }
+
+  .main-chat.mobile-active .chat-search {
+    position: fixed;
+    top: calc(58px + env(safe-area-inset-top) + var(--audio-offset));
+    left: 0;
+    right: 0;
+    z-index: 111;
   }
 
   .main-chat.mobile-active .input-wrapper {

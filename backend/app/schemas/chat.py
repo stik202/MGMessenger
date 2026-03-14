@@ -20,13 +20,14 @@ class ChangePasswordIn(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
-    avatar_url: str = ""
-    phone: str = ""
-    email: str = ""
-    position: str = ""
-    last_name: str = ""
-    first_name: str = ""
-    middle_name: str = ""
+    avatar_url: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    position: str | None = None
+    last_name: str | None = None
+    first_name: str | None = None
+    middle_name: str | None = None
+    is_notifications_muted: bool | None = None
 
 
 class UserProfile(BaseModel):
@@ -44,6 +45,7 @@ class UserProfile(BaseModel):
     middle_name: str
     is_blocked: bool
     is_visible: bool
+    is_notifications_muted: bool = False
 
 
 class UserShort(BaseModel):
@@ -59,6 +61,7 @@ class UserShort(BaseModel):
     last_time: str = ""
     is_group: bool = False
     is_online: bool = False
+    is_notifications_muted: bool = False
 
 
 class UserInfoOut(UserShort):
@@ -176,6 +179,11 @@ class UserNoteOut(BaseModel):
 
 class MessageEditIn(BaseModel):
     text: str = ""
+
+
+class PollVoteIn(BaseModel):
+    message_id: UUID
+    option_id: int
 
 
 class MessageForwardIn(BaseModel):

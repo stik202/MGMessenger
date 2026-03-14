@@ -33,6 +33,7 @@ from app.schemas.chat import (
     GroupUpdateIn,
     LoginIn,
     MessageEditIn,
+    PollVoteIn,
     MessageForwardIn,
     MessageOut,
     PushPublicKeyOut,
@@ -70,6 +71,18 @@ def _parse_list_message(text: str | None) -> dict | None:
     except Exception:
         return None
     if isinstance(data, dict) and data.get("type") == "list":
+        return data
+    return None
+
+
+def _parse_poll_message(text: str | None) -> dict | None:
+    if not text:
+        return None
+    try:
+        data = json.loads(text)
+    except Exception:
+        return None
+    if isinstance(data, dict) and data.get("type") == "poll":
         return data
     return None
 
@@ -125,6 +138,13 @@ def _event_preview(text: str, file_url: str) -> str:
     preview = text.strip()
     if not preview and file_url:
         preview = "Файл"
+    if preview:
+        poll = _parse_poll_message(preview)
+        if poll:
+            return "Опрос"
+        lst = _parse_list_message(preview)
+        if lst:
+            return "Список"
     return preview or "Сообщение"
 
 
@@ -278,13 +298,22 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserProfile:
-    current_user.avatar_url = payload.avatar_url
-    current_user.phone = payload.phone
-    current_user.email = payload.email
-    current_user.position = payload.position
-    current_user.last_name = payload.last_name
-    current_user.first_name = payload.first_name
-    current_user.middle_name = payload.middle_name
+    if payload.avatar_url is not None:
+        current_user.avatar_url = payload.avatar_url
+    if payload.phone is not None:
+        current_user.phone = payload.phone
+    if payload.email is not None:
+        current_user.email = payload.email
+    if payload.position is not None:
+        current_user.position = payload.position
+    if payload.last_name is not None:
+        current_user.last_name = payload.last_name
+    if payload.first_name is not None:
+        current_user.first_name = payload.first_name
+    if payload.middle_name is not None:
+        current_user.middle_name = payload.middle_name
+    if payload.is_notifications_muted is not None:
+        current_user.is_notifications_muted = payload.is_notifications_muted
 
     await db.commit()
     await db.refresh(current_user)
@@ -512,6 +541,7 @@ async def active_chats(
                 last_message=_preview(last, current_user.id) if last else "",
                 last_time=last.created_at.strftime("%H:%M") if last and last.created_at else "",
                 is_online=realtime_hub.has_event_connection(u.login),
+                is_notifications_muted=u.is_notifications_muted,
             )
         )
 
@@ -789,6 +819,61 @@ async def delete_message(
     await db.delete(msg)
     await db.commit()
     await realtime_hub.notify_users(participants, {"type": "message:delete", "chat_type": chat_type, "target": target})
+    return {"status": "success"}
+
+
+@router.post("/polls/vote")
+async def poll_vote(
+    payload: PollVoteIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    msg = await db.scalar(select(Message).where(Message.id == payload.message_id))
+    if not msg:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+
+    if msg.group_id:
+        member = await db.scalar(
+            select(GroupMember.id).where(GroupMember.group_id == msg.group_id, GroupMember.user_id == current_user.id)
+        )
+        if not member:
+            raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
+    else:
+        if msg.sender_id != current_user.id and msg.receiver_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Нет доступа к сообщению")
+
+    poll = _parse_poll_message(msg.text)
+    if not poll:
+        raise HTTPException(status_code=400, detail="Сообщение не является опросом")
+
+    options = poll.get("options") or []
+    option = next((o for o in options if str(o.get("id")) == str(payload.option_id)), None)
+    if not option:
+        raise HTTPException(status_code=404, detail="Вариант не найден")
+
+    votes = option.get("votes") or []
+    login = current_user.login
+    if login in votes:
+        votes = [v for v in votes if v != login]
+    else:
+        votes.append(login)
+    option["votes"] = votes
+    msg.text = json.dumps(poll, ensure_ascii=False)
+
+    await db.commit()
+
+    participants = await _message_participants_logins(db, msg)
+    await realtime_hub.notify_users(
+        participants,
+        {
+            "type": "message:update",
+            "chat_type": "group" if msg.group_id else "private",
+            "target": str(msg.group_id or msg.receiver_user_id or ""),
+            "sender_login": current_user.login,
+            "sender_name": build_display_name(current_user),
+            "preview": _event_preview(msg.text, msg.file_url),
+        },
+    )
     return {"status": "success"}
 
 
