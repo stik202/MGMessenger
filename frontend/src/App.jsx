@@ -65,7 +65,10 @@ function initial(obj) {
 
 function isAudioUrl(url) {
   if (!url) return false;
-  return /\.(webm|ogg|mp3|wav|m4a)(\?.*)?$/i.test(String(url));
+  const value = String(url);
+  if (/\.(webm|ogg|mp3|wav|m4a)(\?.*)?$/i.test(value)) return true;
+  if (value.includes("audio") || value.includes("voice")) return true;
+  return false;
 }
 
 function roomId(a, b) {
@@ -626,9 +629,9 @@ export default function App() {
 
   function getChatStatus(item) {
     if (!item || item.is_group) return null;
-    if (!notificationsEnabled) return "busy";
-    if (isChatMuted(item)) return "busy";
-    if (item.is_online === true) return "online";
+    if (item.is_online === true) {
+      return isChatMuted(item) || !notificationsEnabled ? "busy" : "online";
+    }
     if (item.is_online === false) return "offline";
     return null;
   }
@@ -646,7 +649,23 @@ export default function App() {
   }
 
   const visibleChatItems = useMemo(
-    () => allChatItems.filter((item) => !getChatPref(item).deleted),
+    () => {
+      const toTime = (item) => {
+        const raw =
+          item?.last_time ??
+          item?.last_message_time ??
+          item?.updated_at ??
+          item?.last_at ??
+          item?.last_message_at ??
+          "";
+        if (typeof raw === "number") return raw;
+        const parsed = Date.parse(String(raw));
+        return Number.isNaN(parsed) ? 0 : parsed;
+      };
+      return allChatItems
+        .filter((item) => !getChatPref(item).deleted)
+        .sort((a, b) => toTime(b) - toTime(a));
+    },
     [allChatItems, chatPrefs]
   );
 
@@ -810,6 +829,14 @@ export default function App() {
   }, [messageText, pendingFile]);
 
   useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    requestAnimationFrame(() => {
+      const node = msgListRef.current;
+      if (node) node.scrollTop = node.scrollHeight;
+    });
+  }, [messages.length]);
+
+  useEffect(() => {
     if (!pendingFile) {
       setPendingAttachmentInfo("");
       setPendingAttachmentKind("");
@@ -880,17 +907,59 @@ export default function App() {
         window.history.replaceState({}, "", nextUrl);
       }
       const chatParam = params.get("chat");
+      const chatType = params.get("chat_type");
+      const targetParam = params.get("target");
+      const senderLogin = params.get("sender_login") || params.get("from_login");
       if (chatParam) {
         const [kind, id] = String(chatParam).split(":");
         if (kind === "private") {
           const targetUser = chatsData.users.find((u) => String(u.login) === String(id));
-          if (targetUser) openChat({ ...targetUser, kind: "user", is_group: false, target: targetUser.login });
+          if (targetUser) {
+            openChat({ ...targetUser, kind: "user", is_group: false, target: targetUser.login });
+          } else if (id) {
+            apiGetUserInfo(token, id)
+              .then((u) => openChat({ ...u, kind: "user", is_group: false, target: u.login, login: u.login, name: u.name }))
+              .catch(() => {});
+          }
         }
         if (kind === "group") {
           const targetGroup = chatsData.groups.find((g) => String(g.id) === String(id));
           if (targetGroup) openChat({ ...targetGroup, kind: "group", is_group: true, target: targetGroup.id });
         }
         params.delete("chat");
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      }
+      if (!chatParam && senderLogin) {
+        const targetUser = chatsData.users.find((u) => String(u.login) === String(senderLogin));
+        if (targetUser) {
+          openChat({ ...targetUser, kind: "user", is_group: false, target: targetUser.login });
+        } else {
+          apiGetUserInfo(token, senderLogin)
+            .then((u) => openChat({ ...u, kind: "user", is_group: false, target: u.login, login: u.login, name: u.name }))
+            .catch(() => {});
+        }
+        params.delete("sender_login");
+        params.delete("from_login");
+        const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", nextUrl);
+      }
+      if (!chatParam && chatType && targetParam) {
+        if (chatType === "group") {
+          const targetGroup = chatsData.groups.find((g) => String(g.id) === String(targetParam));
+          if (targetGroup) openChat({ ...targetGroup, kind: "group", is_group: true, target: targetGroup.id });
+        } else if (chatType === "private") {
+          const targetUser = chatsData.users.find((u) => String(u.login) === String(targetParam));
+          if (targetUser) {
+            openChat({ ...targetUser, kind: "user", is_group: false, target: targetUser.login });
+          } else {
+            apiGetUserInfo(token, targetParam)
+              .then((u) => openChat({ ...u, kind: "user", is_group: false, target: u.login, login: u.login, name: u.name }))
+              .catch(() => {});
+          }
+        }
+        params.delete("chat_type");
+        params.delete("target");
         const nextUrl = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
         window.history.replaceState({}, "", nextUrl);
       }
@@ -2575,7 +2644,7 @@ export default function App() {
                 onInput={(e) => {
                   autosizeMessageInput(e.target);
                 }}
-                placeholder="Сообщение..."
+                placeholder=""
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   if (isMobileInputMode()) return;

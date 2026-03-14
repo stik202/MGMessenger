@@ -54,7 +54,13 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification?.data || {};
   const chatKey = resolvePushChatKey(data);
-  const url = chatKey ? `/?chat=${encodeURIComponent(chatKey)}` : (data.url || "/");
+  const params = new URLSearchParams();
+  if (chatKey) params.set("chat", chatKey);
+  if (data.chat_type) params.set("chat_type", data.chat_type);
+  if (data.target) params.set("target", data.target);
+  if (data.sender_login) params.set("sender_login", data.sender_login);
+  if (data.from_login) params.set("from_login", data.from_login);
+  const url = params.toString() ? `/?${params}` : (data.url || "/");
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {

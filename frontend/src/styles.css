@@ -52,7 +52,11 @@ body.has-custom-bg .chat-h,
 body.has-custom-bg .side-head,
 body.has-custom-bg .input-area,
 body.has-custom-bg .chat-search {
-  background: rgba(10, 14, 40, 0.4);
+  background: rgba(10, 14, 40, 0.25);
+}
+
+body.has-custom-bg #root {
+  background: transparent;
 }
 
 body::before {
@@ -1211,18 +1215,21 @@ a {
 }
 
 .btn-blue {
-  background: var(--ios-blue);
+  background: linear-gradient(135deg, #3a7bff, #2c57ff);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-red {
-  background: #e62e2e;
+  background: linear-gradient(135deg, #ff6b6b, #e62e2e);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-gray {
-  background: #555;
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .close-txt {
@@ -1357,6 +1364,9 @@ a {
   width: min(460px, 94vw);
   border-radius: 18px;
   padding: 20px;
+  background: rgba(20, 26, 64, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
 }
 
 .emoji-wrap {
