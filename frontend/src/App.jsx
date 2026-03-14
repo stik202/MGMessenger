@@ -94,6 +94,17 @@ function parseListMessage(text) {
   return null;
 }
 
+function parsePollMessage(text) {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && parsed.type === "poll") return parsed;
+  } catch {
+    // ignore non-json messages
+  }
+  return null;
+}
+
 
 function chatKey(chat) {
   if (!chat) return "";
@@ -140,6 +151,32 @@ function IconDotsVertical() {
       <circle cx="12" cy="5" r="1.8" />
       <circle cx="12" cy="12" r="1.8" />
       <circle cx="12" cy="19" r="1.8" />
+    </svg>
+  );
+}
+
+function IconFile() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 3h8l4 4v14H6z" />
+      <path d="M14 3v4h4" />
+    </svg>
+  );
+}
+
+function IconPoll() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 4h4v12H5zM10 10h4v6h-4zM15 6h4v10h-4z" />
+    </svg>
+  );
+}
+
+function IconList() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 6h2v2H5zM5 11h2v2H5zM5 16h2v2H5z" />
+      <path d="M9 7h10M9 12h10M9 17h10" stroke="currentColor" strokeWidth="2" fill="none" />
     </svg>
   );
 }
@@ -259,6 +296,7 @@ function ChatMessage({
   };
 
   const listData = parseListMessage(messageText);
+  const pollData = parsePollMessage(messageText);
 
   return (
     <div
@@ -286,7 +324,7 @@ function ChatMessage({
           {m.file_url ? (m.is_image ? <img src={m.file_url} alt="file" onClick={() => setImagePreviewUrl(m.file_url)} /> : <a href={m.file_url} target="_blank" rel="noreferrer">Файл</a>) : null}
           {listData ? (
             <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
-              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>📋 {listData.title}</div>
+              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Список: {listData.title}</div>
               {listData.items && listData.items.length > 0 ? (
                 <div style={{ display: "grid", gap: "8px" }}>
                   {listData.items.map((item, idx) => (
@@ -304,7 +342,7 @@ function ChatMessage({
                         {idx + 1}. {item.text}
                       </span>
                       {item.completedBy && (
-                        <span style={{ fontSize: "12px", opacity: 0.6, marginLeft: "auto" }}>вњ“ {item.completedBy}</span>
+                        <span style={{ fontSize: "12px", opacity: 0.6, marginLeft: "auto" }}>ok {item.completedBy}</span>
                       )}
                     </div>
                   ))}
@@ -317,7 +355,20 @@ function ChatMessage({
               )}
             </div>
           ) : null}
-          <div className="msg-text">{listData ? null : displayText}</div>
+          {pollData ? (
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "10px", marginTop: "8px" }}>
+              <div style={{ fontWeight: "600", marginBottom: "10px", fontSize: "15px" }}>Опрос: {pollData.question}</div>
+              <div style={{ display: "grid", gap: "6px" }}>
+                {(pollData.options || []).map((opt, idx) => (
+                  <div key={opt.id || idx} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.05)" }}>
+                    <span style={{ opacity: 0.8 }}>{idx + 1}.</span>
+                    <span>{opt.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div className="msg-text">{listData || pollData ? null : displayText}</div>
           {isLong && !expanded ? (
             <div className="msg-readmore" onClick={handleReadMore}>
               читать полностью
@@ -385,6 +436,7 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [messageSearch, setMessageSearch] = useState("");
+  const [messageSearchOpen, setMessageSearchOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [groupEditSearch, setGroupEditSearch] = useState("");
@@ -410,6 +462,7 @@ export default function App() {
   const [listAddText, setListAddText] = useState("");
   const [listAddMessage, setListAddMessage] = useState(null);
   const [listTitle, setListTitle] = useState("");
+  const [listItemDraft, setListItemDraft] = useState("");
   const [listItems, setListItems] = useState([]);
   const [listEditable, setListEditable] = useState(true);
   const [blockedOpen, setBlockedOpen] = useState(false);
@@ -483,7 +536,10 @@ export default function App() {
     if (!q) return messages;
     return messages.filter((m) => {
       const listData = parseListMessage(m.text || "");
-      const text = listData ? `${listData.title || ""} ${(listData.items || []).map((i) => i.text).join(" ")}` : (m.text || "");
+      const pollData = parsePollMessage(m.text || "");
+      const listText = listData ? `${listData.title || ""} ${(listData.items || []).map((i) => i.text).join(" ")}` : "";
+      const pollText = pollData ? `${pollData.question || ""} ${(pollData.options || []).map((i) => i.text).join(" ")}` : "";
+      const text = listData || pollData ? `${listText} ${pollText}`.trim() : (m.text || "");
       return text.toLowerCase().includes(q);
     });
   }, [messages, messageSearch]);
@@ -951,6 +1007,8 @@ export default function App() {
     updateChatPref(chat, { deleted: false });
     setActiveChatOpenedAtMs(Date.now());
     setActiveChat(chat);
+    setMessageSearchOpen(false);
+    setMessageSearch("");
     clearUnreadForChat(chat);
     if (window.innerWidth <= 768) setIsMobileChat(true);
     loadMessages(chat, true).catch(() => {});
@@ -1142,6 +1200,17 @@ export default function App() {
     });
   }
 
+  function addListDraftItem() {
+    const text = listItemDraft.trim();
+    if (!text) return;
+    setListItems((prev) => [...prev, text]);
+    setListItemDraft("");
+  }
+
+  function removeListDraftItem(index) {
+    setListItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function sendMessage() {
     const chat = activeChat;
     if (!chat) return;
@@ -1179,6 +1248,8 @@ export default function App() {
     setMessageText("");
     setPendingFile(null);
     resetMessageInputHeight();
+    setAttachOpen(false);
+    setEmojiOpen(false);
     try {
       await apiSendMessage(token, retryPayload);
     } catch (e) {
@@ -1460,7 +1531,15 @@ export default function App() {
       options: options.map((text, i) => ({ id: i + 1, text, votes: [], created_by: me?.login || "me" })),
       created_at: Date.now(),
     };
-    setMessageText(JSON.stringify(pollPayload));
+    const chat = activeChat;
+    if (!chat) return;
+    const text = JSON.stringify(pollPayload);
+    apiSendMessage(token, { chatType: chat.is_group ? "group" : "private", target: chat.target, text, file: null })
+      .then(async () => {
+        await Promise.all([loadMessages(chat), refreshChats()]);
+      })
+      .catch((e) => alert(e?.message || "Ошибка отправки"));
+    setMessageText("");
     setPollQuestion("");
     setPollOptions(["", ""]);
     setPollOpen(false);
@@ -2048,7 +2127,7 @@ export default function App() {
           >
             {messageMenu.type === "message" ? (
               <>
-                {messageMenu.message?.is_mine ? (
+                {messageMenu.message?.is_mine && !parseListMessage(messageMenu.message?.text) && !parsePollMessage(messageMenu.message?.text) ? (
                   <button onClick={() => { editOwnMessage(messageMenu.message); setMessageMenu(null); }}>Edit</button>
                 ) : null}
                 {messageMenu.message?.is_mine ? (
@@ -2075,6 +2154,18 @@ export default function App() {
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => { openUserDetails(messageMenu.chat.login); setMessageMenu(null); }}>Профиль</button>
                 ) : null}
+                <button
+                  onClick={() => {
+                    setMessageSearchOpen((v) => {
+                      const next = !v;
+                      if (!next) setMessageSearch("");
+                      return next;
+                    });
+                    setMessageMenu(null);
+                  }}
+                >
+                  {messageSearchOpen ? "Скрыть поиск" : "Поиск по сообщениям"}
+                </button>
                 <button onClick={() => deleteChatLocal(messageMenu.chat)}>Удалить чат</button>
                 {!messageMenu.chat?.is_group ? (
                   <button onClick={() => blockChatUser(messageMenu.chat)}>Заблокировать пользователя</button>
@@ -2205,13 +2296,21 @@ export default function App() {
               <IconDotsVertical />
             </button>
           </div>
-          {activeChat ? (
+          {activeChat && messageSearchOpen ? (
             <div className="chat-search">
               <input
                 value={messageSearch}
                 onChange={(e) => setMessageSearch(e.target.value)}
                 placeholder="Поиск по сообщениям..."
               />
+              <button
+                className="search-close-btn"
+                onClick={() => { setMessageSearchOpen(false); setMessageSearch(""); }}
+                title="Скрыть поиск"
+                aria-label="Скрыть поиск"
+              >
+                ×
+              </button>
             </div>
           ) : null}
           <div className="messages" ref={msgListRef} onScroll={handleMessagesScroll}>
@@ -2234,13 +2333,38 @@ export default function App() {
             {editingMessage?.id ? <div className="edit-hint">Editing message</div> : null}
             <div className="input-wrapper">
               <input ref={fileInputRef} hidden type="file" onChange={(e) => { pickMessageFile(e.target.files?.[0]); e.target.value = ""; }} />
-              <div className="attach-wrap">
-                <button className="icon-btn attach-btn" onClick={() => setAttachOpen((v) => !v)} title="Добавить" aria-label="Добавить">+</button>
+              <div className={`attach-wrap ${attachOpen ? "open" : ""}`}>
+                <button
+                  className="icon-btn attach-btn"
+                  onClick={() => setAttachOpen((v) => !v)}
+                  title="Добавить"
+                  aria-label="Добавить"
+                >
+                  +
+                </button>
                 {attachOpen ? (
                   <div className="attach-menu">
-                    <button onClick={openFilePicker}>Добавить файл</button>
-                    <button onClick={() => { setPollOpen(true); setAttachOpen(false); }}>Создать опрос</button>
-                    <button onClick={() => { setListCreateOpen(true); setAttachOpen(false); }}>Создать список</button>
+                    <button className="attach-item" onClick={openFilePicker}>
+                      <span className="attach-icon"><IconFile /></span>
+                      <span className="attach-text">
+                        <strong>Файл</strong>
+                        <small>Фото или документ</small>
+                      </span>
+                    </button>
+                    <button className="attach-item" onClick={() => { setPollOpen(true); setAttachOpen(false); }}>
+                      <span className="attach-icon"><IconPoll /></span>
+                      <span className="attach-text">
+                        <strong>Опрос</strong>
+                        <small>Варианты для голосования</small>
+                      </span>
+                    </button>
+                    <button className="attach-item" onClick={() => { setListCreateOpen(true); setAttachOpen(false); }}>
+                      <span className="attach-icon"><IconList /></span>
+                      <span className="attach-text">
+                        <strong>Список</strong>
+                        <small>Задачи или покупки</small>
+                      </span>
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -2524,6 +2648,42 @@ export default function App() {
           </div>
         </div>
       ) : null}
+      {pollOpen ? (
+        <div className="modal" style={{ display: "flex" }}>
+          <div className="card">
+            <h3>Создать опрос</h3>
+            <input
+              value={pollQuestion}
+              onChange={(e) => setPollQuestion(e.target.value)}
+              placeholder="Вопрос опроса"
+            />
+            <div className="poll-builder">
+              {pollOptions.map((opt, idx) => (
+                <div className="poll-row" key={`poll-${idx}`}>
+                  <span className="poll-index">{idx + 1}.</span>
+                  <input
+                    value={opt}
+                    onChange={(e) => updatePollOption(idx, e.target.value)}
+                    placeholder={`Вариант ${idx + 1}`}
+                  />
+                  {pollOptions.length > 2 ? (
+                    <button
+                      className="poll-remove"
+                      type="button"
+                      onClick={() => setPollOptions((prev) => prev.filter((_, i) => i !== idx))}
+                    >
+                      x
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <button className="btn-gray" onClick={addPollOption} type="button">Добавить вариант</button>
+            <button className="btn-blue" onClick={submitPollDraft} type="button">Создать опрос</button>
+            <div className="close-txt" onClick={() => { setPollOpen(false); setPollQuestion(""); setPollOptions(["", ""]); }}>Отменить</div>
+          </div>
+        </div>
+      ) : null}
       {listCreateOpen ? (
         <div className="modal" style={{ display: "flex" }}>
           <div className="card">
@@ -2531,39 +2691,54 @@ export default function App() {
             <input
               value={listTitle}
               onChange={(e) => setListTitle(e.target.value)}
-              placeholder="Название списка (напр. Покупки, Задачи)"
+              placeholder="Название списка (например: Покупки, Задачи)"
             />
-            <div style={{ marginTop: "15px", marginBottom: "15px" }}>
-              <label style={{ display: "flex", gap: "10px", alignItems: "center", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={listEditable}
-                  onChange={(e) => setListEditable(e.target.checked)}
-                  style={{ cursor: "pointer" }}
-                />
-                <span>Корректируемый список (участники могут добавлять элементы)</span>
-              </label>
+            <div className="list-mode">
+              <button
+                className={`chip ${listEditable ? "active" : ""}`}
+                onClick={() => setListEditable(true)}
+                type="button"
+              >
+                Корректируемый
+              </button>
+              <button
+                className={`chip ${!listEditable ? "active" : ""}`}
+                onClick={() => setListEditable(false)}
+                type="button"
+              >
+                Фиксированный
+              </button>
             </div>
-            <div style={{ marginBottom: "15px", fontSize: "14px", color: "#aaa" }}>
-              <div>Добавьте элементы (по одному на строку):</div>
-              <textarea
-                value={listItems.join("\n")}
-                onChange={(e) => setListItems(e.target.value.split("\n").filter(x => x.trim()))}
-                placeholder="Элемент 1&#10;Элемент 2&#10;Элемент 3"
-                style={{
-                  width: "100%",
-                  minHeight: "120px",
-                  marginTop: "10px",
-                  padding: "10px",
-                  borderRadius: "12px",
-                  border: "1px solid #555",
-                  backgroundColor: "var(--input-bg)",
-                  color: "#fff",
-                  fontFamily: "inherit",
-                  resize: "vertical",
-                  boxSizing: "border-box"
-                }}
-              />
+            <div className="list-builder">
+              <div className="list-add-row">
+                <input
+                  value={listItemDraft}
+                  onChange={(e) => setListItemDraft(e.target.value)}
+                  placeholder="Новый пункт"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addListDraftItem();
+                    }
+                  }}
+                />
+                <button className="btn-blue" onClick={addListDraftItem} type="button">
+                  Добавить
+                </button>
+              </div>
+              {listItems.length ? (
+                <div className="list-items">
+                  {listItems.map((item, idx) => (
+                    <div className="list-item-row" key={`${item}-${idx}`}>
+                      <span className="list-index">{idx + 1}.</span>
+                      <span className="list-item-text">{item}</span>
+                      <button className="list-remove" onClick={() => removeListDraftItem(idx)} type="button">x</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="list-empty">Пока нет пунктов</div>
+              )}
             </div>
             <button
               className="btn-blue"
@@ -2589,13 +2764,10 @@ export default function App() {
                   editable: listEditable,
                   createdBy: me?.login
                 };
-                // Сохраняем в messageText и отправляем
-                setMessageText(JSON.stringify(listMessage));
+                const text = JSON.stringify(listMessage);
                 setTimeout(() => {
-                  // После установки state, отправляем сообщение
                   const chat = activeChat;
                   if (!chat) return;
-                  const text = JSON.stringify(listMessage);
                   const retryPayload = {
                     chatType: chat.is_group ? "group" : "private",
                     target: chat.target,
@@ -2606,15 +2778,17 @@ export default function App() {
                     await Promise.all([loadMessages(chat), refreshChats()]);
                   }).catch((e) => alert(e?.message || "Ошибка отправки"));
                 }, 0);
+                setMessageText("");
                 setListCreateOpen(false);
                 setListTitle("");
                 setListItems([]);
                 setListEditable(true);
+                setListItemDraft("");
               }}
             >
               Создать список
             </button>
-            <div className="close-txt" onClick={() => { setListCreateOpen(false); setListTitle(""); setListItems([]); }}>Отменить</div>
+            <div className="close-txt" onClick={() => { setListCreateOpen(false); setListTitle(""); setListItems([]); setListItemDraft(""); }}>Отменить</div>
           </div>
         </div>
       ) : null}
