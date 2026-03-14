@@ -1287,7 +1287,7 @@ async def invite_call(
         Message(
             sender_id=current_user.id,
             receiver_user_id=target.id,
-            text="рџ“ћ Попытка звонка",
+            text="Попытка звонка",
             is_read=False,
         )
     )

@@ -1,5 +1,5 @@
 :root {
-  --bg: linear-gradient(135deg, #f7f1dd, #fff3df, #e8f2ff);
+  --bg: linear-gradient(135deg, #efe9d8, #e6e2d8, #d6dbe2);
   --glass: rgba(0, 0, 0, 0.7);
   --ios-blue: #007aff;
   --card-bg: #2c2c2e;
@@ -14,11 +14,11 @@
 html,
 body,
 #root {
-  background-color: #f7f1dd;
+  background-color: #efe9d8;
 }
 
 html {
-  background: #f7f1dd;
+  background: #efe9d8;
 }
 
 body {
@@ -26,7 +26,7 @@ body {
   height: 100vh;
   font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   background: var(--bg);
-  background-color: #f7f1dd;
+  background-color: #efe9d8;
   background-image: none;
   background-size: cover;
   background-position: center;
@@ -1071,11 +1071,25 @@ a {
 .voice-play {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
-  border: none;
-  background: rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: linear-gradient(135deg, rgba(88, 140, 255, 0.8), rgba(50, 95, 255, 0.9));
   color: #fff;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.voice-play svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.voice-play:hover {
+  filter: brightness(1.08);
 }
 
 .voice-wave {
@@ -1596,8 +1610,8 @@ a {
   body {
     height: 100dvh;
     overflow: hidden;
-    background: #f7f1dd;
-    background-color: #f7f1dd;
+    background: #efe9d8;
+    background-color: #efe9d8;
   }
 
   body.has-custom-bg {

@@ -84,18 +84,29 @@ function initial(obj) {
     }
     if (!isSame) {
       audio.src = url;
+      audio.load();
     }
+    setAudioPlayer((p) => ({
+      ...p,
+      url,
+      label,
+      isPlaying: false,
+    }));
     audio.playbackRate = audioPlayer.rate || 1;
-    audio.play().then(() => {
-      setAudioPlayer((p) => ({
-        ...p,
-        url,
-        label,
-        rate: audio.playbackRate,
-        isPlaying: true,
-        duration: audio.duration || p.duration || 0,
-      }));
-    }).catch(() => {});
+    audio.play()
+      .then(() => {
+        setAudioPlayer((p) => ({
+          ...p,
+          url,
+          label,
+          rate: audio.playbackRate,
+          isPlaying: true,
+          duration: audio.duration || p.duration || 0,
+        }));
+      })
+      .catch(() => {
+        setAudioPlayer((p) => ({ ...p, isPlaying: false }));
+      });
   }
 
   function cyclePlaybackRate() {
@@ -190,6 +201,22 @@ function IconPhoneEnd() {
   );
 }
 
+function IconPlay() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 6.5v11l10-5.5-10-5.5Z" />
+    </svg>
+  );
+}
+
+function IconPause() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+    </svg>
+  );
+}
+
 function IconSend() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -212,7 +239,7 @@ function VoiceMessage({ url, durationSec, progress, isActive, isPlaying, onToggl
   return (
     <div className={`voice-msg ${isActive ? "active" : ""}`}>
       <button className="voice-play" onClick={onToggle} title="Прослушать" aria-label="Прослушать">
-        {isPlaying ? "||" : ">"}
+        {isPlaying ? <IconPause /> : <IconPlay />}
       </button>
       <div className={`voice-wave ${isPlaying ? "playing" : ""}`}>
         <div className="voice-progress" style={{ width: `${safeProgress * 100}%` }} />
@@ -628,6 +655,8 @@ export default function App() {
   const initiatorRef = useRef(false);
   const offerSentRef = useRef(false);
   const callPeerRef = useRef("");
+  const callConnectedRef = useRef(false);
+  const callSummarySentRef = useRef(false);
   const pollingRef = useRef(null);
   const longPressRef = useRef(null);
   const messageInputRef = useRef(null);
@@ -777,9 +806,13 @@ export default function App() {
   useEffect(() => {
     const audio = new Audio();
     audio.preload = "metadata";
+    audio.crossOrigin = "anonymous";
     audio.onended = () => setAudioPlayer((p) => ({ ...p, isPlaying: false, currentTime: p.duration || 0 }));
     audio.ontimeupdate = () => setAudioPlayer((p) => ({ ...p, currentTime: audio.currentTime || 0 }));
     audio.onloadedmetadata = () => setAudioPlayer((p) => ({ ...p, duration: audio.duration || 0 }));
+    audio.onplay = () => setAudioPlayer((p) => ({ ...p, isPlaying: true }));
+    audio.onpause = () => setAudioPlayer((p) => ({ ...p, isPlaying: false }));
+    audio.onerror = () => setAudioPlayer((p) => ({ ...p, isPlaying: false }));
     audioRef.current = audio;
     return () => {
       audio.pause();
@@ -954,6 +987,7 @@ export default function App() {
     missing.forEach((url) => {
       const audio = new Audio();
       audio.preload = "metadata";
+      audio.crossOrigin = "anonymous";
       audio.src = url;
       audio.onloadedmetadata = () => {
         if (cancelled) return;
@@ -1616,6 +1650,7 @@ export default function App() {
         remoteAudioRef.current.play?.().catch(() => {});
       }
       setCallStatus("В звонке");
+      callConnectedRef.current = true;
     };
     peerRef.current = pc;
     return pc;
@@ -1657,6 +1692,8 @@ export default function App() {
     setCallOpen(true);
     setCallStatus(isInitiator ? "Ожидание ответа..." : "Подключение...");
     setSpeakerEnabled(false);
+    callConnectedRef.current = false;
+    callSummarySentRef.current = false;
     initiatorRef.current = isInitiator;
     offerSentRef.current = false;
     pendingIceCandidatesRef.current = [];
@@ -1682,6 +1719,7 @@ export default function App() {
         await flushPendingIceCandidates(pc);
         clearCallWaitTimer();
         setCallStatus("В звонке");
+        callConnectedRef.current = true;
       }
       if (msg.type === "ice" && msg.candidate) {
         if (pc.remoteDescription && pc.remoteDescription.type) {
@@ -1771,7 +1809,10 @@ export default function App() {
     setIncomingCall(null);
   }
 
-  function endCall(sendSignal = true) {
+  async function endCall(sendSignal = true) {
+    const durationSnapshot = callDurationSec || 0;
+    const connectedSnapshot = callConnectedRef.current;
+    const peerLogin = callPeerRef.current;
     clearCallWaitTimer();
     if (sendSignal && callWsRef.current && callWsRef.current.readyState === WebSocket.OPEN) {
       callWsRef.current.send(JSON.stringify({ type: "hangup" }));
@@ -1790,6 +1831,22 @@ export default function App() {
     setCallStatus("Ожидание");
     setMicEnabled(true);
     setSpeakerEnabled(false);
+    if (!callSummarySentRef.current && token && peerLogin && connectedSnapshot) {
+      const durationLabel = formatDuration(durationSnapshot);
+      const summaryText = `Звонок завершен • ${durationLabel}`;
+      callSummarySentRef.current = true;
+      try {
+        await apiSendMessage(token, {
+          chatType: "private",
+          target: peerLogin,
+          text: summaryText,
+          file: null,
+        });
+        await refreshChats();
+      } catch {
+        // ignore summary failures
+      }
+    }
   }
 
   function toggleMic() {
@@ -2992,7 +3049,7 @@ export default function App() {
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.email} onChange={(e) => setProfileForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
             <input className={`profile-extra-on-landscape ${showProfileExtra ? "force-show" : ""}`} value={profileForm.position} onChange={(e) => setProfileForm((p) => ({ ...p, position: e.target.value }))} placeholder="Инфо" />
             <div className="profile-bg-actions">
-              <label className="btn-blue upload-btn">
+              <label className="btn-gray upload-btn">
                 Загрузить фон
                 <input hidden type="file" accept="image/*" onChange={(e) => { setCustomBackground(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
