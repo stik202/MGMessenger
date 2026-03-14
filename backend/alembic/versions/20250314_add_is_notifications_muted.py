@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "20250314_add_is_notifications_muted"
-down_revision = ""
+down_revision = None
 branch_labels = None
 depends_on = None
 
