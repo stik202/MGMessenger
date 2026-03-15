@@ -74,8 +74,12 @@ function initial(obj) {
   }
 
   function toggleAudioPlayback(url, label = "") {
+    console.log("toggleAudioPlayback", { url, current: audioPlayer.url, isPlaying: audioPlayer.isPlaying });
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      console.warn("audioRef missing");
+      return;
+    }
     const isSame = audioPlayer.url === url;
     if (isSame && audioPlayer.isPlaying) {
       audio.pause();
