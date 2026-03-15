@@ -82,19 +82,24 @@ function initial(obj) {
       setAudioPlayer((p) => ({ ...p, isPlaying: false }));
       return;
     }
-    if (!isSame) {
-      audio.src = url;
+
+    const cleanupBlob = () => {
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current);
+        audioBlobUrlRef.current = null;
+      }
+    };
+
+    const setSource = async (src) => {
+      cleanupBlob();
+      audio.src = src;
       audio.load();
-    }
-    setAudioPlayer((p) => ({
-      ...p,
-      url,
-      label,
-      isPlaying: false,
-    }));
-    audio.playbackRate = audioPlayer.rate || 1;
-    audio.play()
-      .then(() => {
+    };
+
+    const play = async () => {
+      try {
+        audio.playbackRate = audioPlayer.rate || 1;
+        await audio.play();
         setAudioPlayer((p) => ({
           ...p,
           url,
@@ -103,10 +108,29 @@ function initial(obj) {
           isPlaying: true,
           duration: audio.duration || p.duration || 0,
         }));
-      })
-      .catch(() => {
+      } catch {
         setAudioPlayer((p) => ({ ...p, isPlaying: false }));
-      });
+      }
+    };
+
+    setAudioPlayer((p) => ({ ...p, url, label, isPlaying: false }));
+
+    (async () => {
+      if (!isSame) {
+        try {
+          const res = await fetch(url, { mode: "cors", credentials: "include" });
+          if (!res.ok) throw new Error("fetch");
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          audioBlobUrlRef.current = blobUrl;
+          await setSource(blobUrl);
+        } catch {
+          // Fallback to direct URL if fetch/cors fails
+          await setSource(url);
+        }
+      }
+      await play();
+    })();
   }
 
   function cyclePlaybackRate() {
@@ -617,6 +641,7 @@ export default function App() {
   const recordChunksRef = useRef([]);
   const recordStartRef = useRef(0);
   const recordTimerRef = useRef(null);
+  const recordStopTimerRef = useRef(null);
   const [chatPrefs, setChatPrefs] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(LS_CHAT_PREFS_KEY) || "{}");
@@ -662,6 +687,7 @@ export default function App() {
   const messageInputRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioRef = useRef(null);
+  const audioBlobUrlRef = useRef(null);
   const swipeStartRef = useRef({ x: 0, y: 0 });
   const stickToBottomRef = useRef(true);
   const reconnectRef = useRef({ timer: null, attempt: 0, stopped: false });
@@ -769,9 +795,16 @@ export default function App() {
           item?.updated_at ??
           item?.last_at ??
           item?.last_message_at ??
+          item?.last_message?.created_at ??
           "";
-        if (typeof raw === "number") return raw;
-        const parsed = Date.parse(String(raw));
+        if (typeof raw === "number") {
+          // Some APIs return seconds, some return milliseconds
+          return raw > 1e12 ? raw : raw * 1000;
+        }
+        const str = String(raw || "");
+        const num = Number(str);
+        if (!Number.isNaN(num) && num > 0) return num > 1e12 ? num : num * 1000;
+        const parsed = Date.parse(str);
         return Number.isNaN(parsed) ? 0 : parsed;
       };
       return allChatItems
@@ -817,6 +850,10 @@ export default function App() {
     return () => {
       audio.pause();
       audio.src = "";
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current);
+        audioBlobUrlRef.current = null;
+      }
       audioRef.current = null;
     };
   }, []);
@@ -1319,6 +1356,14 @@ export default function App() {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
+    if (recordStreamRef.current) {
+      recordStreamRef.current.getTracks().forEach((t) => t.stop());
+      recordStreamRef.current = null;
+    }
+    if (recordStopTimerRef.current) {
+      clearTimeout(recordStopTimerRef.current);
+      recordStopTimerRef.current = null;
+    }
   }
 
   function openChat(chat) {
@@ -1735,6 +1780,12 @@ export default function App() {
       if (msg.type === "hangup") endCall(false);
     });
     ws.onopen = () => ws.send(JSON.stringify({ type: "join" }));
+    ws.onclose = () => {
+      if (callOpen) endCall(false);
+    };
+    ws.onerror = () => {
+      if (callOpen) endCall(false);
+    };
     callWsRef.current = ws;
   }
 
@@ -2281,11 +2332,18 @@ export default function App() {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       return;
     }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert("Запись голоса не поддерживается");
+      return;
+    }
+
     const storedPerm = localStorage.getItem(LS_MIC_PERMISSION);
     if (storedPerm === "denied") {
       alert("Доступ к микрофону запрещен в настройках браузера");
       return;
     }
+
     if (navigator.permissions?.query) {
       try {
         const status = await navigator.permissions.query({ name: "microphone" });
@@ -2294,16 +2352,20 @@ export default function App() {
           alert("Доступ к микрофону запрещен в настройках браузера");
           return;
         }
+        if (status.state === "granted") {
+          localStorage.setItem(LS_MIC_PERMISSION, "granted");
+        }
       } catch {
         // ignore permission query errors
       }
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Запись голоса не поддерживается");
-      return;
-    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let stream = recordStreamRef.current;
+      const hasLiveTrack = stream?.getAudioTracks?.()?.some((t) => t.readyState === "live");
+      if (!hasLiveTrack) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       localStorage.setItem(LS_MIC_PERMISSION, "granted");
       recordStreamRef.current = stream;
       recordChunksRef.current = [];
@@ -2316,10 +2378,6 @@ export default function App() {
         const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
         recordChunksRef.current = [];
         if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-        if (recordStreamRef.current) {
-          recordStreamRef.current.getTracks().forEach((t) => t.stop());
-          recordStreamRef.current = null;
-        }
         if (blob.size > 0) {
           const file = new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" });
           setPendingFile(file);
@@ -2328,6 +2386,11 @@ export default function App() {
           setPendingAttachmentInfo(`Голосовое сообщение: ${mm}:${ss}`);
           setPendingAttachmentKind("voice");
         }
+        if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
+        recordStopTimerRef.current = setTimeout(() => {
+          recordStreamRef.current?.getTracks().forEach((t) => t.stop());
+          recordStreamRef.current = null;
+        }, 30_000);
       };
       recorder.start();
       recordStartRef.current = Date.now();
@@ -2338,7 +2401,7 @@ export default function App() {
       }, 1000);
       setIsRecording(true);
     } catch (e) {
-      alert(e?.message || "Не удалось начать запись");
+      alert(e?.message || "Не удалось получить доступ к микрофону");
     }
   }
 
@@ -2572,7 +2635,10 @@ export default function App() {
         <div className="context-backdrop" onMouseDown={() => setMessageMenu(null)} onTouchStart={() => setMessageMenu(null)}>
           <div
             className="context-menu"
-            style={{ left: Math.max(8, Math.min(messageMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(messageMenu.y, window.innerHeight - 170)) }}
+            style={{
+              left: Math.max(8, Math.min(messageMenu.x, window.innerWidth - 24)),
+              top: Math.max(8, Math.min(messageMenu.y, window.innerHeight - 24)),
+            }}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
@@ -2706,6 +2772,9 @@ export default function App() {
                       {callsDisabled ? <IconPhoneOff /> : null}
                     </div>
                   ) : null}
+                  {(u.unread_count ?? 0) > 0 && !isCurrentChat(u) ? (
+                    <div className="badge">{(u.unread_count ?? 0) > 99 ? "99+" : u.unread_count}</div>
+                  ) : null}
                   <button
                     className="chat-more-btn"
                     onClick={(e) => {
@@ -2717,7 +2786,6 @@ export default function App() {
                   >
                     <IconDotsVertical />
                   </button>
-                  {(u.unread_count ?? 0) > 0 && !isCurrentChat(u) ? <div className="badge">{(u.unread_count ?? 0) > 99 ? "99+" : u.unread_count}</div> : null}
                 </div>
               );
             })}
@@ -2827,7 +2895,7 @@ export default function App() {
                 title="К последнему сообщению"
                 aria-label="К последнему сообщению"
               >
-                ↓
+                ⤵
               </button>
             ) : null}
           </div>
