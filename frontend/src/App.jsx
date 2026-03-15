@@ -2378,6 +2378,13 @@ export default function App() {
         const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
         recordChunksRef.current = [];
         if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+
+        // остановим микрофон сразу, чтобы индикатор ушёл
+        if (recordStreamRef.current) {
+          recordStreamRef.current.getTracks().forEach((t) => t.stop());
+          recordStreamRef.current = null;
+        }
+
         if (blob.size > 0) {
           const file = new File([blob], `voice-${Date.now()}.webm`, { type: "audio/webm" });
           setPendingFile(file);
@@ -2386,13 +2393,9 @@ export default function App() {
           setPendingAttachmentInfo(`Голосовое сообщение: ${mm}:${ss}`);
           setPendingAttachmentKind("voice");
         }
-        if (recordStopTimerRef.current) clearTimeout(recordStopTimerRef.current);
-        recordStopTimerRef.current = setTimeout(() => {
-          recordStreamRef.current?.getTracks().forEach((t) => t.stop());
-          recordStreamRef.current = null;
-        }, 30_000);
       };
-      recorder.start();
+      // Slice ensures we receive chunks even for very short recordings
+      recorder.start(250);
       recordStartRef.current = Date.now();
       setRecordingSec(0);
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
