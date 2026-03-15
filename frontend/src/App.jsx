@@ -108,7 +108,8 @@ function initial(obj) {
           isPlaying: true,
           duration: audio.duration || p.duration || 0,
         }));
-      } catch {
+      } catch (err) {
+        console.error("audio.play failed", err, { src: audio.src, readyState: audio.readyState });
         setAudioPlayer((p) => ({ ...p, isPlaying: false }));
       }
     };
