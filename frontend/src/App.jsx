@@ -1022,18 +1022,46 @@ export default function App() {
     if (!missing.length) return;
     let cancelled = false;
     missing.forEach((url) => {
-      const audio = new Audio();
-      audio.preload = "metadata";
-      audio.crossOrigin = "anonymous";
-      audio.src = url;
-      audio.onloadedmetadata = () => {
-        if (cancelled) return;
-        setVoiceDurations((prev) => ({ ...prev, [url]: audio.duration || 0 }));
+      const loadMetadata = async () => {
+        const audio = new Audio();
+        audio.preload = "metadata";
+        audio.crossOrigin = "anonymous";
+
+        const setDuration = (duration) => {
+          if (cancelled) return;
+          setVoiceDurations((prev) => ({ ...prev, [url]: duration || 0 }));
+        };
+
+        audio.onloadedmetadata = () => setDuration(audio.duration || 0);
+        audio.onerror = () => setDuration(voiceDurations[url] || 0);
+
+        audio.src = url;
+
+        // If loading fails (CORS/auth), try via fetch+blob as fallback
+        audio.onerror = async () => {
+          if (cancelled) return;
+          try {
+            const res = await fetch(url, { mode: "cors", credentials: "include" });
+            if (!res.ok) throw new Error("fetch");
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const audio2 = new Audio();
+            audio2.preload = "metadata";
+            audio2.src = blobUrl;
+            audio2.onloadedmetadata = () => {
+              URL.revokeObjectURL(blobUrl);
+              setDuration(audio2.duration || 0);
+            };
+            audio2.onerror = () => {
+              URL.revokeObjectURL(blobUrl);
+              setDuration(voiceDurations[url] || 0);
+            };
+          } catch {
+            setDuration(voiceDurations[url] || 0);
+          }
+        };
       };
-      audio.onerror = () => {
-        if (cancelled) return;
-        setVoiceDurations((prev) => ({ ...prev, [url]: prev[url] || 0 }));
-      };
+      loadMetadata();
     });
     return () => {
       cancelled = true;
@@ -1653,12 +1681,11 @@ export default function App() {
       await apiSendMessage(token, retryPayload);
     } catch (e) {
       const errText = e?.message || "Not sent";
+      console.error("apiSendMessage failed", e);
+      alert(errText);
       setMessages((prev) =>
         prev.map((m) => (m.id === optimistic.id ? { ...m, _localStatus: "failed", _errorText: errText } : m))
       );
-      if (String(errText).toLowerCase().includes("blocked")) {
-        alert(errText);
-      }
       return;
     }
     await Promise.all([loadMessages(chat), refreshChats()]);
@@ -2327,6 +2354,13 @@ export default function App() {
 
   async function toggleVoiceRecording() {
     if (isRecording && recorderRef.current) {
+      if (typeof recorderRef.current.requestData === "function") {
+        try {
+          recorderRef.current.requestData();
+        } catch {
+          // ignore
+        }
+      }
       recorderRef.current.stop();
       setIsRecording(false);
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
